@@ -1,10 +1,18 @@
 import { Suspense, useEffect, useMemo } from 'react'
 import { useThree } from '@react-three/fiber'
+import type { Group } from 'three'
+import { stageOf, type CropId, type SaveData, type Stage } from '@farm/game'
 import { ASSETS } from './assets'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
 
-// D1 固定机位；D3 换环绕相机（OrbitControls + 边界 clamp）
+export interface FarmSceneProps {
+  data: SaveData
+  now: number
+  onPlot: (i: number) => void
+}
+
+// D2 固定机位；D3 换环绕相机（OrbitControls + 边界 clamp）
 function CameraSetup() {
   const camera = useThree((s) => s.camera)
   useEffect(() => {
@@ -44,46 +52,66 @@ function Ground() {
   )
 }
 
-// D1 静态预览：摆一组不同"阶段比例"的作物，验证资产与比例关系；D2 换成 packages/game 状态驱动
-const PREVIEW: ({ crop: 'carrot' | 'corn'; stageScale: number } | null)[] = [
-  { crop: 'carrot', stageScale: 1 },
-  { crop: 'carrot', stageScale: 0.55 },
-  { crop: 'carrot', stageScale: 0.25 },
-  { crop: 'corn', stageScale: 1 },
-  { crop: 'corn', stageScale: 0.55 },
-  null,
-]
+// 三个阶段的呈现比例（离散；D3 换连续插值 + 播种/收获动画）
+const STAGE_SCALE: Record<Stage, number> = {
+  empty: 0,
+  sprout: 0.25,
+  growing: 0.55,
+  mature: 1,
+}
 
-function Farm() {
-  const dirtGltf = useGLTF(ASSETS.dirt)
-  const carrotGltf = useGLTF(ASSETS.carrot)
-  const cornGltf = useGLTF(ASSETS.corn)
+interface MakeMap {
+  dirt: () => Group
+  carrot: () => Group
+  corn: () => Group
+}
 
-  const make = useMemo(
-    () => ({
-      dirt: () => normalized(dirtGltf.scene, { width: 1.02 }),
-      carrot: () => normalized(carrotGltf.scene, { height: 0.46 }),
-      corn: () => normalized(cornGltf.scene, { height: 0.78 }),
-    }),
-    [dirtGltf, carrotGltf, cornGltf],
-  )
+interface PlotViewProps {
+  index: number
+  crop: CropId | null
+  stage: Stage
+  onPlot: (i: number) => void
+  make: MakeMap
+}
+
+function PlotView({ index, crop, stage, onPlot, make }: PlotViewProps) {
+  const [x, z] = plotPosition(index)
+  const dirt = useMemo(() => make.dirt(), [make])
+  const plant = useMemo(() => (crop ? make[crop]() : null), [crop, make])
 
   return (
+    <group
+      position={[x, 0.02, z]}
+      onClick={(e) => {
+        e.stopPropagation()
+        onPlot(index)
+      }}
+      onPointerOver={() => (document.body.style.cursor = 'pointer')}
+      onPointerOut={() => (document.body.style.cursor = 'auto')}
+    >
+      <primitive object={dirt} />
+      {plant && stage !== 'empty' && (
+        <group scale={STAGE_SCALE[stage]}>
+          <primitive object={plant} />
+        </group>
+      )}
+    </group>
+  )
+}
+
+function Farm({ data, now, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
+  return (
     <>
-      {Array.from({ length: PLOT_ROWS * PLOT_COLS }, (_, i) => {
-        const [x, z] = plotPosition(i)
-        const preview = PREVIEW[i]
-        return (
-          <group key={i} position={[x, 0.02, z]}>
-            <primitive object={make.dirt()} />
-            {preview && (
-              <group scale={preview.stageScale}>
-                <primitive object={preview.crop === 'carrot' ? make.carrot() : make.corn()} />
-              </group>
-            )}
-          </group>
-        )
-      })}
+      {data.plots.map((p, i) => (
+        <PlotView
+          key={i}
+          index={i}
+          crop={p.crop}
+          stage={stageOf(p, now)}
+          onPlot={onPlot}
+          make={make}
+        />
+      ))}
     </>
   )
 }
@@ -152,7 +180,20 @@ function Trees() {
   )
 }
 
-export default function FarmScene() {
+export default function FarmScene({ data, now, onPlot }: FarmSceneProps) {
+  const dirtGltf = useGLTF(ASSETS.dirt)
+  const carrotGltf = useGLTF(ASSETS.carrot)
+  const cornGltf = useGLTF(ASSETS.corn)
+
+  const make = useMemo<MakeMap>(
+    () => ({
+      dirt: () => normalized(dirtGltf.scene, { width: 1.02 }),
+      carrot: () => normalized(carrotGltf.scene, { height: 0.46 }),
+      corn: () => normalized(cornGltf.scene, { height: 0.78 }),
+    }),
+    [dirtGltf, carrotGltf, cornGltf],
+  )
+
   return (
     <>
       <color attach="background" args={[0x87ceeb]} />
@@ -161,7 +202,7 @@ export default function FarmScene() {
       <Lights />
       <Suspense fallback={null}>
         <Ground />
-        <Farm />
+        <Farm data={data} now={now} onPlot={onPlot} make={make} />
         <FenceRing />
         <Trees />
       </Suspense>
