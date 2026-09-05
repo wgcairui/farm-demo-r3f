@@ -3,6 +3,7 @@ dist/
 .expo/
 *.log
 .DS_Store
+.playwright-cli/
 
 # Capacitor iOS 构建产物（vendor 源码保留跟踪，github 不通时依赖本地构建）
 apps/web/ios/build

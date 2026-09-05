@@ -32,7 +32,7 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 | node / npm | 26.7.0 / 11.19.0 | bun 1.4.0 可用但不作为主工具链 |
 | expo（SDK 57） | ~57.0.20 | mobile 基座 |
 | react-native | 0.86.3 | Expo 57 模板锁定 |
-| react | 19.2.3 | mobile；web 端 19.2.8 各自独立 |
+| react | 19.2.3 | 双端统一（web 端从 19.2.8 收敛，否则 npm 无法单副本 hoist，ERESOLVE 冲突） |
 | three | ~0.185.1 | **双端必须同版本**，npm workspaces hoist 到根，单副本 |
 | @react-three/fiber | ~9.7.0 | 同上 hoist 共享 |
 | expo-gl | ~57.0.2 | SDK 匹配版（`expo install` 选定） |
@@ -82,4 +82,12 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 ### 待办（Phase 2 移植前）
 
 - `packages/game` 的 `load/save` 直连 `localStorage`，RN 无此全局——移植时把存储后端做成参数注入（web=localStorage，RN=AsyncStorage 封装）。
+
+## Phase 1 web 侧踩坑（R3F 原型）
+
+- **poly.pizza/Quaternius 的 GLB 把 `metallicFactor` 统一导出为 0.4**，但场景无环境贴图 → 金属度按 PBR 公式吸走漫反射，模型整体发黑。低模卡通风应在加载时统一 `metalness=0`（见 `apps/web/src/farm3d/gltf.ts` 的归一化管线）。
+- R3F 默认开 **ACES tone mapping**，暗色板会再被压暗一档；卡通风直接 `<Canvas flat>` 关掉。
+- poly.pizza 模型单位极不统一，入场前必须按目标尺寸归一化（重定标 + XZ 居中 + 底面贴地），且缩放要用 `multiplyScalar`（源节点可能自带缩放，`setScalar` 会丢比例）。
+- `trees.glb`（3.3MB）是 5 棵树合集，按节点名（`NormalTree_N`）拆选单体后再归一化；GLB 结构可直接解析 JSON chunk 查看（12 字节头 + 4 字节长度）。
+- workspaces + Expo：根 package.json 锁 react 19.2.3（Expo 模板），web 若用不同 react 版本，npm 对 fiber 的 `peerOptional react-dom` 仲裁会失败——**monorepo 里 react/react-dom 必须全仓一个版本**。
 

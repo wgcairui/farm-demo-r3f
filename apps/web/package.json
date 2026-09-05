@@ -13,8 +13,8 @@
     "@capacitor/core": "^8.5.1",
     "@capacitor/ios": "^8.5.1",
     "@farm/game": "*",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.1",
