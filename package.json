@@ -3,24 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "sync": "tsc --noEmit && vite build && cap sync ios && node scripts/restore-vendor-dep.mjs",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@capacitor/core": "^8.5.1",
-    "@capacitor/ios": "^8.5.1",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
-  },
-  "devDependencies": {
-    "@capacitor/cli": "^8.5.1",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
-    "typescript": "^7.0.2",
-    "vite": "^8.2.2"
+    "dev": "npm run dev --workspace @farm/web",
+    "build": "npm run build --workspace @farm/web"
   }
 }

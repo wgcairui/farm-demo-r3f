@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import { CROPS, type CropId, type SaveData, type Stage, load, progressOf, save, stageOf } from './game'
+import { CROPS, type CropId, type SaveData, type Stage, load, progressOf, save, stageOf } from '@farm/game'
 
 interface Float {
   id: number
