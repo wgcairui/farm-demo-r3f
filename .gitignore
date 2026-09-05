@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.expo/
+*.log
+.DS_Store
+
+# Capacitor iOS 构建产物（vendor 源码保留跟踪，github 不通时依赖本地构建）
+apps/web/ios/build
+apps/web/ios/App/Pods
+apps/web/ios/App/App/public
+apps/web/ios/App/capacitor.config.json
+
+# Expo
+apps/mobile/.expo
+apps/mobile/ios
+apps/mobile/android

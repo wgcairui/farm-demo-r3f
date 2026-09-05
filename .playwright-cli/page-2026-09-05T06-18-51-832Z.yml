@@ -1,0 +1,22 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - heading "🧑‍🌾 开心农场" [level=1] [ref=e5]
+    - generic [ref=e6]: 🪙 40
+  - generic [ref=e7]:
+    - generic [ref=e31] [cursor=pointer]: 🌱
+    - generic [ref=e11] [cursor=pointer]: ✚
+    - generic [ref=e13] [cursor=pointer]: ✚
+    - generic [ref=e15] [cursor=pointer]: ✚
+    - generic [ref=e17] [cursor=pointer]: ✚
+    - generic [ref=e19] [cursor=pointer]: ✚
+  - paragraph [ref=e20]: 选种子 → 点空地播种 → 成熟后点收获
+  - generic [ref=e21]:
+    - button "🥕 胡萝卜 买 10 · 卖 25" [ref=e22] [cursor=pointer]:
+      - generic [ref=e23]: 🥕
+      - generic [ref=e24]: 胡萝卜
+      - generic [ref=e25]: 买 10 · 卖 25
+    - button "🌽 玉米 买 20 · 卖 55" [ref=e26] [cursor=pointer]:
+      - generic [ref=e27]: 🌽
+      - generic [ref=e28]: 玉米
+      - generic [ref=e29]: 买 20 · 卖 55
+    - button "↺" [ref=e30] [cursor=pointer]

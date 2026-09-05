@@ -1,0 +1,78 @@
+{
+  "object" : {
+    "artifacts" : [
+      {
+        "kind" : {
+          "xcframework" : {
+
+          }
+        },
+        "packageRef" : {
+          "identity" : "capacitor-swift-pm",
+          "kind" : "fileSystem",
+          "location" : "/Users/cairui/Code/farm-demo/ios/App/CapApp-SPM/Vendor/capacitor-swift-pm",
+          "name" : "capacitor-swift-pm"
+        },
+        "path" : "/Users/cairui/Code/farm-demo/ios/build/SourcePackages/artifacts/capacitor-swift-pm/Capacitor/Capacitor.xcframework",
+        "source" : {
+          "checksum" : "c6ca2c8eb19a51e984320c1747bd9a18e4e8a39afad7524d4d8d0c0403944eb4",
+          "type" : "local"
+        },
+        "targetName" : "Capacitor"
+      },
+      {
+        "kind" : {
+          "xcframework" : {
+
+          }
+        },
+        "packageRef" : {
+          "identity" : "capacitor-swift-pm",
+          "kind" : "fileSystem",
+          "location" : "/Users/cairui/Code/farm-demo/ios/App/CapApp-SPM/Vendor/capacitor-swift-pm",
+          "name" : "capacitor-swift-pm"
+        },
+        "path" : "/Users/cairui/Code/farm-demo/ios/build/SourcePackages/artifacts/capacitor-swift-pm/Cordova/Cordova.xcframework",
+        "source" : {
+          "checksum" : "bee4a9362e93e8205be4dd43c0bec3e49ff77645b9f132a22bc8db01f4809563",
+          "type" : "local"
+        },
+        "targetName" : "Cordova"
+      }
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "capacitor-swift-pm",
+          "kind" : "fileSystem",
+          "location" : "/Users/cairui/Code/farm-demo/ios/App/CapApp-SPM/Vendor/capacitor-swift-pm",
+          "name" : "capacitor-swift-pm"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/Users/cairui/Code/farm-demo/ios/App/CapApp-SPM/Vendor/capacitor-swift-pm"
+        },
+        "subpath" : "capacitor-swift-pm"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "capapp-spm",
+          "kind" : "fileSystem",
+          "location" : "/Users/cairui/Code/farm-demo/ios/App/CapApp-SPM",
+          "name" : "CapApp-SPM"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/Users/cairui/Code/farm-demo/ios/App/CapApp-SPM"
+        },
+        "subpath" : "capapp-spm"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}
