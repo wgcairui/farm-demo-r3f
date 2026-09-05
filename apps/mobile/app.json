@@ -6,9 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "transpilePackages": ["@farm/game"],
+    "transpilePackages": [
+      "@farm/game"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cairui.farm-3d"
     },
     "android": {
       "adaptiveIcon": {

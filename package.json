@@ -10,5 +10,10 @@
   "scripts": {
     "dev": "npm run dev --workspace @farm/web",
     "build": "npm run build --workspace @farm/web"
+  },
+  "dependencies": {
+    "expo": "~57.0.20",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
   }
 }

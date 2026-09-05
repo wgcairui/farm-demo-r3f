@@ -48,3 +48,38 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 2. **逻辑与渲染零耦合**：`packages/game` 为纯 TS 源码包（无构建产物），web/mobile 直接消费 TS 源；接后端时该包的"时间戳 + 懒计算"模式原样搬服务端。
 3. **expo-gl WebGL2 shim**：three r163+ 仅走 WebGL2 路径，RN 无 `WebGL2RenderingContext` 全局，App 入口补空类 shim（见 `apps/mobile/App.tsx`）。
 4. **UI 一律 RN overlay**，不依赖 drei 的 DOM 系组件；相机控制 Phase 2 用 gesture-handler 自写。
+
+## expo-gl × three 踩坑实录（Phase 0，iOS 模拟器 + dev build）
+
+ iOS 27 + Xcode 27 + Expo SDK 57 + RN 0.86（bridgeless）+ three 0.185 + expo-gl 57.0.2 实测。
+
+### 环境层
+
+- **iOS 27 强制 UIScene 生命周期**（Apple TN3187）：Expo 57 prebuild 模板未适配，dev build 启动即崩（`UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`，EXC_BREAKPOINT）。修复：`scripts/patch-ios27-scene.sh` 给 Info.plist 注入 `UIApplicationSceneManifest` 并重写 AppDelegate/SceneDelegate；**每次 `expo prebuild` 后必须重跑**。
+- **Xcode 27 移除 Simulator.app**：`expo run:ios` 起/osascript 阶段失败；用 `xcrun simctl install/launch` 手动装启绕过。
+- **Expo Go 不可用**：iOS 27 模拟器上 idb HID 点击失效（系统弹窗无法关），放弃 Expo Go，全部走 dev build。
+
+### JS 层（apps/mobile/App.tsx）
+
+- **gl 实例是 JSI HostObject**：`in`/`hasOwnProperty` 恒 true，不能当存在性判断；必须 `typeof` 真读且 try/catch（读未知属性可能抛异常）。
+- **GL 方法/常量全集（698 个）挂在全局 `WebGLRenderingContext.prototype`**，但 gl 实例的原型链不过它 → `gl.clearColor` 等全 undefined。解法：在替换全局类**之前**捕获真 proto，把方法（绑 this）与常量拷为 gl 实例 own property。
+- **three r163+ 的 WebGL1 检查**用 `context instanceof WebGLRenderingContext`，EXGL 的类带品牌式 `Symbol.hasInstance`，改原型无效 → 运行时把全局 `WebGLRenderingContext` 换成哑类使检查落空（EXGL 实为 GLES3，`supportsWebGL2 = true`）。
+- **缺的查询函数按语义兜底**：`getExtension→null`、`getSupportedExtensions→[]`、`getShaderPrecisionFormat→{127,127,23}`、`getContextAttributes`。
+
+### 渲染循环层（黑屏根因，最贵的教训）
+
+- **EXGL 命令队列没有背压**：JS 侧每帧 `renderer.render()` + `endFrameEXP()` 只是入队 + `dispatch_async` 到串行 GL 线程；JS 提交快于 GL 消费时 backlog 无界增长，**blit/present 排在队尾永远执行不到 → 永久黑屏**（JS 侧 60fps、getError=0、一切"正常"）。
+- 解法：**每帧 `gl.getError()` 做背压屏障**——它是阻塞批（`addBlockingToNextBatch`），JS 等到 GL 线程把队列排空才返回，在途帧恒 ≤2。屏障耗时即单帧真实 GL 成本。
+- 循环驱动用**自调度 `setTimeout` 链**（屏障返回后再排下一帧），不用 rAF：RN 的 rAF 在 JS 阻塞后会补发积压回调造成提交突发，把刚压平的队列再次打爆。
+- 呈现链路（读 expo-gl 源码得出）：`endFrameEXP` → GL 线程执行批 → `glContextFlushed` → `needsRedraw` → MSAA blit 到 view framebuffer → 主线程 CADisplayLink `presentRenderbuffer`。
+
+### 性能层（iOS 模拟器）
+
+- 模拟器 GLES→Metal 转译层**片元着色极慢**（分层实测：裸 clear 管线 4ms/帧、three 无物体 5ms、Basic 立方体 57ms、Lambert ~160ms、Standard/PBR 534ms）。
+- **视图点尺寸减半 = 像素 1/4 = 4 倍提速**（6→22fps，`SIM_DOWNSCALE` 常量控制）；`msaaSamples={1}` 无感（MSAA 非瓶颈）。
+- 结论：**低多边形风格配 MeshLambertMaterial**（r155+ Lambert 已逐像素光照，别指望它便宜多少，但比 Standard 便宜 3 倍+）；真机跑原生 GLES 无此瓶颈，上真机恢复全分辨率，预期 60fps（待真机验证）。
+
+### 待办（Phase 2 移植前）
+
+- `packages/game` 的 `load/save` 直连 `localStorage`，RN 无此全局——移植时把存储后端做成参数注入（web=localStorage，RN=AsyncStorage 封装）。
+
