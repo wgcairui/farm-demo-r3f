@@ -77,11 +77,13 @@ const Lights = memo(function Lights() {
   const dir = useRef<DirectionalLight>(null)
   const hemi = useRef<HemisphereLight>(null)
 
-  useFrame(() => {
+  useFrame((_, dt) => {
     const dTarget = isRain() ? 1.5 : isDrought() ? 2.7 : 2.4
     const hTarget = isRain() ? 0.85 : isDrought() ? 1.25 : 1.1
-    if (dir.current) dir.current.intensity += (dTarget - dir.current.intensity) * 0.04
-    if (hemi.current) hemi.current.intensity += (hTarget - hemi.current.intensity) * 0.04
+    // 帧率无关阻尼 1-e^(-k·dt)（k=6，dt 钳 0.1s）：60/120Hz 过渡速度一致，替代裸 lerp 系数
+    const k = 1 - Math.exp(-6 * Math.min(dt, 0.1))
+    if (dir.current) dir.current.intensity += (dTarget - dir.current.intensity) * k
+    if (hemi.current) hemi.current.intensity += (hTarget - hemi.current.intensity) * k
   })
 
   return (
@@ -122,12 +124,14 @@ const SKY_DROUGHT = new Color(0xe0c98d)
 
 function WeatherMood() {
   const scene = useThree((s) => s.scene)
-  useFrame(() => {
+  useFrame((_, dt) => {
     const target = isRain() ? SKY_RAIN : isDrought() ? SKY_DROUGHT : SKY
+    // 同 Lights：帧率无关阻尼（k=5），天空过渡速度不随刷新率变化
+    const k = 1 - Math.exp(-5 * Math.min(dt, 0.1))
     const bg = scene.background
-    if (bg instanceof Color) bg.lerp(target, 0.03)
+    if (bg instanceof Color) bg.lerp(target, k)
     const fog = scene.fog as { color: Color } | null
-    if (fog) fog.color.lerp(target, 0.03)
+    if (fog) fog.color.lerp(target, k)
   })
   return null
 }
@@ -223,7 +227,10 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
         ;(window as unknown as { __hoverPlot?: number }).__hoverPlot = index
         document.body.style.cursor = 'pointer'
       }}
-      onPointerOut={() => (document.body.style.cursor = 'auto')}
+      onPointerOut={() => {
+        ;(window as unknown as { __hoverPlot?: number | null }).__hoverPlot = null
+        document.body.style.cursor = 'auto'
+      }}
     >
       <primitive object={dirt} />
       {!crop && hint && (
@@ -420,6 +427,11 @@ function PestBug({ onPest }: { onPest: () => void }) {
         <sphereGeometry args={[0.032, 10, 8]} />
         <meshLambertMaterial color={0x241812} />
       </mesh>
+      {/* 透明放大 hitbox：虫体太小难点中，点偏落回地块会误触发施肥/收获 */}
+      <mesh scale={[2.4, 2.4, 2.4]}>
+        <sphereGeometry args={[0.055, 8, 6]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
       <mesh ref={ring} rotation-x={-Math.PI / 2} position={[0, -0.27, 0]} raycast={() => null}>
         <ringGeometry args={[0.24, 0.31, 28]} />
         <meshBasicMaterial color={0xff5252} transparent opacity={0.4} depthWrite={false} />
@@ -568,9 +580,9 @@ function FloaterBridge() {
   return null
 }
 
-/** D6 事件驱动器：把每帧 delta 喂给事件系统（单例状态在 events.ts） */
+/** D6 事件驱动器：单例状态在 events.ts，墙钟差补结算由它自己记 lastTick */
 function EventsTicker({ plots }: { plots: SaveData['plots'] }) {
-  useFrame((_, dt) => tickEvents(Math.min(dt, 0.05) * 1000, plots))
+  useFrame(() => tickEvents(plots))
   return null
 }
 

@@ -4,7 +4,7 @@
 // 时间模型仍是 packages/game 的 plantedAt 时间戳：事件不改游戏规则，
 // 只改"有效生长进度"（bonusMs），stageOf/progressOf 拿到的依旧是一个纯时间戳，
 // 与服务端方案的同构叙事不被破坏。
-import { CROPS, type CropId, type Plot } from '@farm/game'
+import { CROPS, PLOT_COUNT, type CropId, type Plot } from '@farm/game'
 import { queueFloater } from './floaters'
 import { plotPosition } from './layout'
 import { playDamage, playDrought, playPest, playRain } from './sfx'
@@ -37,15 +37,22 @@ export interface ActiveEvent {
   plot: number
   startAt: number
   endAt: number
+  /** pest 专用：锁定目标那一茬的 plantedAt，收获补种后超时不殃及新苗 */
+  plantedAt: number | null
 }
 
 const fx = new Map<number, PlotFx>()
 let active: ActiveEvent | null = null
-let lastEndAt = 0
 let nextRollAt = performance.now() + FIRST_EVENT_MS
+/** 上一次 tick 的 performance.now：用于后台回来时按墙钟差补结算 */
+let lastTickAt: number | null = null
 let lastPlots: Plot[] = []
 let bannerKey = ''
 let tool: 'seed' | 'fert' = 'seed'
+
+/** 附加层 bonusMs 的合法幅度上限（取最长作物全生长期的 2 倍），手工改档超界直接拒 */
+const BONUS_LIMIT =
+  Math.max(...Object.values(CROPS).map((c) => c.stageMs[0] + c.stageMs[1])) * 2
 
 // —— 附加状态持久化：主存档（coins/plots）归 packages/game，这里只存事件附加层 ——
 // 逐帧累加的 bonusMs 不落盘（崩溃丢几秒进度可接受），只在离散动作后整体冲刷。
@@ -66,12 +73,12 @@ try {
     const parsed: unknown = JSON.parse(raw)
     if (Array.isArray(parsed)) {
       for (const [i, v] of parsed as [unknown, unknown][]) {
-        if (typeof i !== 'number' || i < 0 || i > 5) continue
+        if (typeof i !== 'number' || i < 0 || i >= PLOT_COUNT) continue
         if (typeof v !== 'object' || v === null) continue
         const e = v as Record<string, unknown>
         if (typeof e.bonusMs !== 'number' || !Number.isFinite(e.bonusMs)) continue
         fx.set(i, {
-          bonusMs: e.bonusMs,
+          bonusMs: Math.max(-BONUS_LIMIT, Math.min(BONUS_LIMIT, e.bonusMs)),
           fert: e.fert === true,
           dmg: e.dmg === true,
           watered: e.watered === true,
@@ -159,6 +166,7 @@ function startEvent(type: EventType, now: number): void {
     plot,
     startAt: now,
     endAt: now + (type === 'rain' ? RAIN_MS : type === 'drought' ? DROUGHT_MS : PEST_TTL_MS),
+    plantedAt: type === 'pest' ? (lastPlots[plot]?.plantedAt ?? null) : null,
   }
   if (type === 'rain') playRain()
   else if (type === 'drought') playDrought()
@@ -166,33 +174,41 @@ function startEvent(type: EventType, now: number): void {
   setBanner(active, active.endAt - now)
 }
 
-export function tickEvents(dtMs: number, plots: Plot[]): void {
+export function tickEvents(plots: Plot[]): void {
   const now = performance.now()
+  const prevTick = lastTickAt
+  lastTickAt = now
+  // 墙钟差补结算：rAF 在后台标签页暂停，回来那一帧 gap 是真实间隔，一次性补齐——
+  // 与生长的 Date.now() 墙钟哲学对齐，切后台不再"白嫖干旱"/白丢雨加成。
+  // 事件效果只补到 endAt 为止（后台就该结束的部分不多算）。
+  const gap = prevTick === null ? 0 : Math.max(0, now - prevTick)
+  const evGap = active ? Math.max(0, Math.min(now, active.endAt) - (prevTick ?? now)) : 0
   lastPlots = plots
 
   // 偏移累加：只对生长中（未成熟）的地块生效；成熟后继续累计只会堆出无意义的大数
   for (let i = 0; i < plots.length; i++) {
-    if (!plots[i].crop || isMature(plots[i], i)) continue
+    const p = plots[i]
+    if (!p.crop || isMature(p, i)) continue
     const f = ensure(i)
-    if (f.fert) f.bonusMs += dtMs * 0.5
-    if (active?.type === 'rain') f.bonusMs += dtMs
+    if (f.fert) f.bonusMs += gap * 0.5
+    if (active?.type === 'rain') f.bonusMs += evGap
     else if (active?.type === 'drought') {
-      if (plots[i].crop === 'corn' && !f.watered) f.bonusMs -= dtMs
-      else if (plots[i].crop === 'carrot') f.bonusMs += dtMs * 0.5
+      if (p.crop === 'corn' && !f.watered) f.bonusMs -= evGap
+      else if (p.crop === 'carrot') f.bonusMs += evGap * 0.5
     }
   }
 
   if (active) {
     if (now >= active.endAt) {
-      if (active.type === 'pest' && plots[active.plot]?.crop) {
-        // 超时没人管：叶子被啃，收获减产一半
+      // 超时减产校验 plantedAt：虫害期间目标被收获再补种，惩罚不能落到新茬头上
+      const target = plots[active.plot]
+      if (active.type === 'pest' && target?.crop && target.plantedAt === active.plantedAt) {
         ensure(active.plot).dmg = true
         const [x, z] = plotPosition(active.plot)
         queueFloater(x, 0.7, z, '🐛 叶子被啃 · 减产一半')
         playDamage()
       }
       active = null
-      lastEndAt = now
       nextRollAt = now + ROLL_EVERY_MS
       setBanner(null)
       flush()
@@ -238,8 +254,7 @@ export function consumePest(): number {
   if (active?.type !== 'pest') return -1
   const plot = active.plot
   active = null
-  lastEndAt = performance.now()
-  nextRollAt = lastEndAt + ROLL_EVERY_MS
+  nextRollAt = performance.now() + ROLL_EVERY_MS
   setBanner(null)
   return plot
 }

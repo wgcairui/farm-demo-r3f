@@ -8,6 +8,7 @@ import {
   consumePest,
   effPlot,
   FERT_COST,
+  getTool,
   isDamaged,
   onHarvest,
   onPlant,
@@ -36,6 +37,11 @@ export function useFarm() {
     const [px, pz] = plotPosition(i)
 
     if (st === 'empty') {
+      // 施肥工具点空地：误触会突然扣种子钱，提示后忽略（种子不受影响，选回种子即可种）
+      if (getTool() === 'fert') {
+        queueFloater(px, 0.45, pz, '🧪 施肥要点到作物上')
+        return
+      }
       const def = CROPS[snap.selected]
       if (snap.coins < def.seedPrice) return
       setData((d) => {
