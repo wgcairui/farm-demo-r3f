@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber'
 import { CROPS, type CropId } from '@farm/game'
 import './App.css'
+import { trackPointerDown } from './farm3d/clickGuard'
 import FarmScene from './farm3d/FarmScene'
 import { useFarm } from './farm3d/useFarm'
 
@@ -14,6 +15,7 @@ export default function App() {
         flat
         dpr={[1, 2]}
         camera={{ position: [4.6, 3.6, 5.8], fov: 42, near: 0.1, far: 100 }}
+        onPointerDown={trackPointerDown}
       >
         <FarmScene data={data} now={now} onPlot={handlePlot} />
       </Canvas>
