@@ -2,17 +2,17 @@
 
 本文件沉淀每一轮「批准 → 实施 → 验收」的轨迹。README 顶部只保留一句「当前在哪」，PRD §5 是权威工作步骤拆分，本表是 D 级别 + commit 级别的实时状态。
 
-最近更新：2026-09-06（D7~D10 全部完成 + Vercel 单线部署；cc 链路同日下线）
+最近更新：2026-09-06（D7~D12 全部完成；D12 多角度审计 + 3 layout bug 修复）
 
 ---
 
 ## 当前状态
 
-**Phase 1 D7~D10 全部完成**，prod 单线部署：Vercel CDN。
+**Phase 1 D7~D12 全部完成**，prod 单线部署：Vercel CDN。
 
 - 主站 prod：https://farm-demo-gamma.vercel.app
 
-cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现在返回 410 Gone）。详见 README「cc 部署历史」+ D11 实施回顾（待 commit）。
+cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现在返回 410 Gone）。
 
 ---
 
@@ -40,7 +40,8 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 | D8 | ✅ | 田园背景装饰：程序化柯基 + 狗屋 + 石板路 + 池塘（无 GLB） + 2 轮 review fix | `48bfb91`、`8bd9878`、`4e6f8ce`、`cf704df`、`d4b087a` |
 | **D9** | ✅ | **部署基建**：apps/web Dockerfile（multi-stage npm builder → nginx:alpine）+ vercel.json + `.vercelignore` | `92aa065`、`a7e1703`、`0dc66fe`、`e05bef5` |
 | **D10** | ✅ | **菜园入口 + 仓库**：FenceRing 留缺口 + 石板路穿过 + 程序化木墙茅草顶仓库 | `8b21752` |
-| **D11** | ✅ | **cc 部署下线**：停 farm-web 容器 + 删镜像 + 删 game.ladishb.com nginx vhost + 410 Gone 兜底 + 删 cc 上 farm-demo-r3f 仓库 | （待） |
+| **D11** | ✅ | **cc 部署下线**：停 farm-web 容器 + 删镜像 + 删 game.ladishb.com nginx vhost + 410 Gone 兜底 + 删 cc 上 farm-demo-r3f 仓库 | `e347782` |
+| **D12** | ✅ | **多角度布局审计 + 3 个 bug 修复**：石板路侵入 plot + 仓库被 cottage 遮挡 + 仓库视觉雷同 cottage | `0194339` |
 
 ### D7 实施回顾
 
@@ -116,6 +117,41 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 - `https://game.ladishb.com/` → HTTP/2 **410 Gone**（之前 200 + 小满农场 3D）
 - `https://farm-demo-gamma.vercel.app` → HTTP/2 200（Vercel CDN 唯一 prod 站点）
 - cc 上无 farm-demo 任何痕迹（容器、镜像、仓库、临时文件全清）
+
+---
+
+### D12 实施回顾（多角度布局审计 + 3 bug 修复）
+
+**目标**：用多角度视觉审计找布局 bug，修复后重新部署到 Vercel prod。
+
+**审计方法**：
+- Playwright Python + Chromium headless，模拟 OrbitControls 鼠标拖拽，从 11 个不同相机角度（默认 3/4、近顶视、东南西北四角、+x -x 侧视、缩放、事件触发后）截图
+- 几何推演验证路径与地块的 AABB 是否重叠（用 Node 计算每块石板 vs 每块地的半边距之和）
+- 截图存于 `/tmp/farm-audit/multi/`（修复前 11 张）和 `/tmp/farm-audit/post-fix/`（修复后 8 张）
+
+**发现 bug**：
+
+| ID | 严重 | 描述 | 证据 |
+|---|---|---|---|
+| **P1-1** | blocker | 原路径 9 块石板最后 3 块（x ∈ [-1.7, -1.1]）侵入 plot 0 (-1.2, -0.6) 和 plot 3 (-1.2, 0.6)，玩家无法种这两块地 | 几何计算：stone 8 vs plot 3 dx=0.1 dz=0.25 已深入 plot |
+| **P1-2** | blocker | 仓库原位置 `[-3.5, 0, -2.5]` 与 cottage 同 x 线，被 cottage 完全遮挡（默认相机 +x +y +z 视角），用户根本看不到仓库 | 截图 `multi/04-camera-from-z-negative.png`：从 -z 方向看两栋楼融成一片 |
+| **P2-1** | polish | 仓库视觉与 cottage 雷同（金字塔顶 + 浅色墙 + 方窗），缺乏「仓库感」 | 截图 `multi/02-camera-rotated-left.png` |
+
+**修复**：
+- `apps/web/src/farm3d/deco/Path.tsx`：路径由 9 块缩成 8 块，末端从 `(-1.1, 0.35)` 退到 `(-1.95, 0.05)`，与 plot 0/3 边界留 0.24m 安全距离，仍穿过栅栏缺口进入菜园
+- `apps/web/src/farm3d/deco/Warehouse.tsx`：
+  - 位置 `[-3.5, 0, -2.5]` → `[-1.5, 0, -3.0]`（向 +x 偏 2m，z 后移 0.5m 与背栏留缓冲）
+  - 屋顶：4 段锥（金字塔）→ 双坡山墙（两个斜置 box + 山墙封板 + 屋脊横木）
+  - 墙色：0xb8924a → 0x8a6a3a（深陈旧木色）；屋顶：0x8b6914 → 0x6b4a18（暗灰棕）
+  - 贴 6 条竖向木板条（前墙）+ 6 条侧墙木板条（深一档 0x6e4f2a）模拟拼接墙
+  - 窗：左右各 1 个方窗 → 4 条横向通风缝（前墙）+ 4 条侧墙通风缝（接近全黑）
+  - 门：原 2 个把手球 → 4 个铁铰链 + 1 个中央门闩
+  - 加 4 根角柱（0x4a2c10 深棕色）围出「敦实仓库」骨架
+- `apps/web/src/farm3d/FarmScene.tsx`：NormalTree_1 从 `(-0.3, -3.6)` 挪到 `(1.0, -3.6)`，避让搬过来的仓库
+
+**修复验证**：截图 `post-fix/03-topdown.png`、`post-fix/06-fresh-default.png` 三个 bug 全消（仓库清晰可见 + 不与背栏穿模 + 视觉差异化明显），路径与地块无重叠。
+
+**部署**：commit `0194339` push origin，Vercel CLI `--prod` Ready in 17s，alias `https://farm-demo-gamma.vercel.app` 已是修复后版本。
 
 ---
 
