@@ -768,6 +768,8 @@ const FenceRing = memo(function FenceRing() {
       list.push({ obj: make(), x, z: -hz, rotY: 0 }, { obj: make(), x, z: hz, rotY: 0 })
     }
     for (let i = 0; i < 4; i++) {
+      // 左侧 i=1 段（z≈-0.43）跳过：留出菜园入口给石板路穿过，正对 cottage
+      if (i === 1) continue
       const z = -hz + (2 * hz * (i + 0.5)) / 4
       list.push({ obj: make(), x: -hx, z, rotY: Math.PI / 2 }, { obj: make(), x: hx, z, rotY: Math.PI / 2 })
     }

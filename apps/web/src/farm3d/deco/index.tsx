@@ -5,6 +5,7 @@ import Dog from './Dog'
 import Doghouse from './Doghouse'
 import Path from './Path'
 import Pond from './Pond'
+import Warehouse from './Warehouse'
 
 export function DecoLayer() {
   return (
@@ -14,9 +15,10 @@ export function DecoLayer() {
       <Dog />
       <Path />
       <Pond />
+      <Warehouse />
     </>
   )
 }
 
-export { Cottage, Dog, Doghouse, Path, Pond }
+export { Cottage, Dog, Doghouse, Path, Pond, Warehouse }
 export default DecoLayer
