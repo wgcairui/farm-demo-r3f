@@ -2,8 +2,11 @@
 // 无心跳：生长呈现由 FarmScene 的 useFrame 逐帧计算，点击时直接取 Date.now()——
 // 交互之间零重渲染。与 2D 版、未来服务端版同构（plantedAt 时间戳是唯一事实源）。
 // D6 事件层（events.ts）同样只通过"有效时间戳"介入：effPlot 偏移后喂给 stageOf。
+//
+// D7 状态分支说明：handlePlot 的主事实源是 plot.state，不再依赖 stageOf。
+// events.ts 的 withered 自动恢复由 PlotStateTicker 驱动（tickPlotStates）。
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CROPS, load, save, stageOf, type CropId, type SaveData } from '@farm/game'
+import { CROPS, load, save, tickPlot, type CropId, type PlotState, type SaveData } from '@farm/game'
 import {
   consumePest,
   effPlot,
@@ -33,70 +36,83 @@ export function useFarm() {
     const at = Date.now()
     const snap = dataRef.current
     const p = snap.plots[i]
-    const st = stageOf(effPlot(p, i), at)
     const [px, pz] = plotPosition(i)
 
-    if (st === 'empty') {
-      // 施肥工具点空地：误触会突然扣种子钱，提示后忽略（种子不受影响，选回种子即可种）
-      if (getTool() === 'fert') {
-        queueFloater(px, 0.45, pz, '🧪 施肥要点到作物上')
+    // handlePlot 状态分支主事实源是 plot.state，不再依赖 stageOf
+    switch (p.state as PlotState) {
+      case 'empty': {
+        if (getTool() === 'fert') {
+          queueFloater(px, 0.45, pz, '🧪 施肥要点到作物上')
+          return
+        }
+        const def = CROPS[snap.selected]
+        if (snap.coins < def.seedPrice) return
+        setData((d) => {
+          if (d.plots[i].crop !== null || d.coins < CROPS[d.selected].seedPrice) return d
+          const plots = d.plots.slice()
+          // 播种后立即进入 sown 状态（待 tickPlotStates 推进）
+          plots[i] = { crop: d.selected, plantedAt: at, state: 'sown', witheredAt: null }
+          return { ...d, plots, coins: d.coins - CROPS[d.selected].seedPrice }
+        })
+        playPlant()
+        onPlant(i)
+        queueFloater(px, 0.55, pz, `-${def.seedPrice}`)
         return
       }
-      const def = CROPS[snap.selected]
-      if (snap.coins < def.seedPrice) return
-      setData((d) => {
-        // updater 内重新校验（纯函数，StrictMode 会双调用；音效/特效在 updater 外只发一次）
-        if (d.plots[i].crop !== null || d.coins < CROPS[d.selected].seedPrice) return d
-        const plots = d.plots.slice()
-        plots[i] = { crop: d.selected, plantedAt: at }
-        return { ...d, plots, coins: d.coins - CROPS[d.selected].seedPrice }
-      })
-      playPlant()
-      onPlant(i)
-      queueFloater(px, 0.55, pz, `-${def.seedPrice}`)
-      return
-    }
 
-    // sprout 和 growing 都算"生长中"：干旱浇水/施肥不能等 10 秒幼苗期过了才生效
-    if ((st === 'sprout' || st === 'growing') && p.crop) {
-      // 干旱优先级最高：不浇水玉米就停长，施肥先靠边
-      if (tryWater(i, p.crop)) {
-        playSplash()
-        queueFloater(px, 0.5, pz, '💧')
+      case 'sown':
+      case 'sprout':
+      case 'growing': {
+        // 干旱浇水/施肥不能等 10 秒幼苗期过了才生效
+        if (tryWater(i, p.crop!)) {
+          playSplash()
+          queueFloater(px, 0.5, pz, '💧')
+          return
+        }
+        const fert = tryFertilize(i, snap.coins)
+        if (fert === 'ok') {
+          setData((d) => (d.coins < FERT_COST ? d : { ...d, coins: d.coins - FERT_COST }))
+          playFertilize()
+          queueFloater(px, 0.5, pz, '🌱 +50%')
+          return
+        }
+        if (fert === 'poor') queueFloater(px, 0.5, pz, '🪙 不够')
         return
       }
-      const fert = tryFertilize(i, snap.coins)
-      if (fert === 'ok') {
-        setData((d) => (d.coins < FERT_COST ? d : { ...d, coins: d.coins - FERT_COST }))
-        playFertilize()
-        queueFloater(px, 0.5, pz, '🌱 +50%')
-        return
-      }
-      if (fert === 'poor') queueFloater(px, 0.5, pz, '🪙 不够')
-      return
-    }
 
-    if (st === 'mature' && p.crop) {
-      const def = CROPS[p.crop]
-      // 虫害没处理过：减产一半（floater 显示实际到账，玩家自己学到教训）
-      const gain = isDamaged(i) ? Math.floor(def.sellPrice / 2) : def.sellPrice
-      setData((d) => {
-        if (d.plots[i].crop !== p.crop) return d
-        const plots = d.plots.slice()
-        plots[i] = { crop: null, plantedAt: null }
-        return { ...d, plots, coins: d.coins + gain }
-      })
-      // 五件套主菜动效：震屏 + 径向金光 + 叶子碎屑 + 爆金币粒子 + 大字符浮字
-      // 先清旧浮字避免主菜 +N 被 "✨ 可收获" 栈压住
-      clearFloaters()
-      triggerShake(isDamaged(i) ? 'soft' : 'normal')
-      spawnShockwave(px, pz)
-      spawnLeafBurst(px, 0.5, pz, 8)
-      playHarvest()
-      window.setTimeout(playCoin, 90)
-      spawnCoinBurst(px, 0.3, pz)
-      queueFloater(px, 0.85, pz, `+${gain}${isDamaged(i) ? ' 🐛' : ''}`, { hero: true })
-      onHarvest(i)
+      case 'mature': {
+        const def = CROPS[p.crop!]
+        const gain = isDamaged(i) ? Math.floor(def.sellPrice / 2) : def.sellPrice
+        setData((d) => {
+          if (d.plots[i].crop !== p.crop) return d
+          const plots = d.plots.slice()
+          // 收获后进入 withered 状态，8s 后由 tickPlotStates 自动清空
+          plots[i] = { crop: null, plantedAt: null, state: 'withered', witheredAt: at }
+          return { ...d, plots, coins: d.coins + gain }
+        })
+        clearFloaters()
+        triggerShake(isDamaged(i) ? 'soft' : 'normal')
+        spawnShockwave(px, pz)
+        spawnLeafBurst(px, 0.5, pz, 8)
+        playHarvest()
+        window.setTimeout(playCoin, 90)
+        spawnCoinBurst(px, 0.3, pz)
+        queueFloater(px, 0.85, pz, `+${gain}${isDamaged(i) ? ' 🐛' : ''}`, { hero: true })
+        onHarvest(i)
+        return
+      }
+
+      case 'withered': {
+        // withered 状态点击立即清理，无需音效/特效
+        setData((d) => {
+          if (d.plots[i].state !== 'withered') return d
+          const plots = d.plots.slice()
+          plots[i] = { crop: null, plantedAt: null, state: 'empty', witheredAt: null }
+          return { ...d, plots }
+        })
+        queueFloater(px, 0.45, pz, '🍂 已清理')
+        return
+      }
     }
   }, [])
 
@@ -113,10 +129,15 @@ export function useFarm() {
 
   const select = useCallback((id: CropId) => setData((d) => ({ ...d, selected: id })), [])
 
+  /** D7：PlotStateTicker 回调，用 withered 自动恢复后的新 plots 数组替换 */
+  const tickPlots = useCallback((plots: SaveData['plots']) => {
+    setData((d) => ({ ...d, plots }))
+  }, [])
+
   const reset = useCallback(() => {
     localStorage.clear()
     location.reload()
   }, [])
 
-  return { data, handlePlot, handlePest, select, reset }
+  return { data, handlePlot, handlePest, select, reset, tickPlots }
 }

@@ -5,23 +5,24 @@ import type {
   Group,
   HemisphereLight,
   InstancedMesh,
-  Mesh,
   MeshBasicMaterial,
 } from 'three'
-import { Color, Object3D, Vector3 } from 'three'
+import { Color, Mesh, Object3D, Vector3 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { CROPS, progressOf, type CropId, type SaveData } from '@farm/game'
+import { CROPS, progressOf, type CropId, type PlotState, type SaveData } from '@farm/game'
 import { ASSETS } from './assets'
 import { isClick } from './clickGuard'
 import {
   getActive,
   getBonus,
   getFx,
+  getPlotStateRecoveryMs,
   isDrought,
   isRain,
   isThirsty,
   PEST_TTL_MS,
   tickEvents,
+  tickPlotStates,
 } from './events'
 import {
   consumeShake,
@@ -43,11 +44,14 @@ import { mountFloaterDom, queueFloater, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
 import { DUR, ease } from './motion'
+import { PLOT_STATE_TINT } from './landState'
 
 export interface FarmSceneProps {
   data: SaveData
   onPlot: (i: number) => void
   onPest: () => void
+  /** D7：withered 自动恢复推动，每次 tickPlotStates 产生新数组时回调 */
+  onTickPlots: (plots: SaveData['plots']) => void
 }
 
 // D3 环绕相机。边界 clamp：距离 3.2~14、极角 0.3~1.25 rad（不钻地、不翻顶）、禁平移。
@@ -154,36 +158,38 @@ interface PlotViewProps {
   index: number
   crop: CropId | null
   plantedAt: number | null
+  state: PlotState
   /** 空地提示环：仅当选中种子买得起且地块为空 */
   hint: boolean
   onPlot: (i: number) => void
   make: MakeMap
 }
 
-function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps) {
+function PlotView({ index, crop, plantedAt, state, hint, onPlot, make }: PlotViewProps) {
   const [x, z] = plotPosition(index)
   const dirt = useMemo(() => make.dirt(), [make])
-  const plant = useMemo(() => (crop ? make[crop]() : null), [crop, make])
+  // withered 状态不显示作物模型（即使 crop 字段还有值）
+  const plant = useMemo(() => (crop && state !== 'withered' ? make[crop]() : null), [crop, state, make])
 
   const scaleGroupRef = useRef<Group>(null)
   const hintRef = useRef<Group>(null)
   const squashAtRef = useRef<number | null>(null)
   const matureBounceAtRef = useRef<number | null>(null)
   const wasMatureRef = useRef(false)
-  const stateRef = useRef<{ crop: CropId | null; plant: Group | null }>({ crop, plant })
+  const stateRef = useRef<{ crop: CropId | null; plant: Group | null; state: PlotState }>({ crop, plant, state })
 
   // 播种/收获的边界检测：播种 → 压弹；收获 → 把旧模型交给 PopLayer 起跳消失
   useEffect(() => {
     const prev = stateRef.current
     if (prev.crop && !crop && prev.plant) spawnHarvestPop(prev.plant, x, z)
     if (!prev.crop && crop) squashAtRef.current = performance.now()
-    stateRef.current = { crop, plant }
-  }, [crop, plant, x])
+    stateRef.current = { crop, plant, state }
+  }, [crop, plant, state, x])
 
   useFrame(() => {
     const now = performance.now()
 
-    // 空地提示呼吸（D5）
+    // 空地提示呼吸（D5）：withered 不显示提示环
     if (hintRef.current) {
       const k = Math.sin((now / 1000) * Math.PI * 1.2)
       hintRef.current.scale.setScalar(1 + 0.06 * k)
@@ -192,10 +198,14 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
     }
 
     // 生长连续插值：Date.now 对齐 plantedAt 的时间基（帧级平滑，不等重渲染）；
-    // 进度含事件偏移（getBonus），与进度条/收获判定同源
+    // 进度含事件偏移（getBonus），与进度条/收获判定同源。
+    // withered 状态 base 固定 0.85（略缩，凹下感），不用 progressOf。
     let base = 0.08
-    if (crop && plantedAt !== null) {
-      const t = ease.clamp01(progressOf({ crop, plantedAt: plantedAt - getBonus(index) }, Date.now()))
+    if (state === 'withered') {
+      base = 0.85
+      wasMatureRef.current = false
+    } else if (crop && plantedAt !== null) {
+      const t = ease.clamp01(progressOf({ crop, plantedAt: plantedAt - getBonus(index), state, witheredAt: null }, Date.now()))
       // 成熟瞬间的一次弹跳（D5：可收获信号）
       if (t >= 1 && !wasMatureRef.current) matureBounceAtRef.current = now
       wasMatureRef.current = t >= 1
@@ -222,7 +232,20 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
 
     const g = scaleGroupRef.current
     if (g) g.scale.setScalar(base * squash * bounce)
+
+    // D7：按 state 驱动 dirt 材质颜色（metalness=0 前提，flat tone mapping）
+    if (dirtRef.current) {
+      dirtRef.current.traverse((o) => {
+        if (o instanceof Mesh) {
+          const mat = o.material as MeshBasicMaterial | import('three').MeshLambertMaterial
+          if ('color' in mat && mat) mat.color.setHex(PLOT_STATE_TINT[state])
+        }
+      })
+    }
   })
+
+  // D7：dirt 对象 ref（用于 useFrame 内颜色驱动）
+  const dirtRef = useRef<Group>(null)
 
   return (
     <group
@@ -240,8 +263,8 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
         document.body.style.cursor = 'auto'
       }}
     >
-      <primitive object={dirt} />
-      {!crop && hint && (
+      <primitive object={dirt} ref={dirtRef} />
+      {!crop && hint && state === 'empty' && (
         <group ref={hintRef} position={[0, 0.07, 0]} rotation-x={-Math.PI / 2}>
           <mesh>
             <ringGeometry args={[0.26, 0.33, 32]} />
@@ -255,13 +278,19 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
         </group>
       )}
       {/* D6：倒计时浮字（QQ 农场风格：作物头顶小字，< 1 分钟换色+图标）+ 状态环 */}
-      {crop && plantedAt !== null && <CountdownFloater index={index} crop={crop} plantedAt={plantedAt} />}
-      <StatusRing index={index} crop={crop} />
+      {crop && plantedAt !== null && state !== 'withered' && (
+        <CountdownFloater index={index} crop={crop} plantedAt={plantedAt} />
+      )}
+      <StatusRing index={index} crop={crop} state={state} />
     </group>
   )
 }
 
-function Farm({ data, onPlot, make }: Pick<FarmSceneProps, 'data' | 'onPlot'> & { make: MakeMap }) {
+function Farm({
+  data,
+  onPlot,
+  make,
+}: Pick<FarmSceneProps, 'data' | 'onPlot'> & { make: MakeMap }) {
   const afford = data.coins >= CROPS[data.selected].seedPrice
   return (
     <>
@@ -271,6 +300,7 @@ function Farm({ data, onPlot, make }: Pick<FarmSceneProps, 'data' | 'onPlot'> & 
           index={i}
           crop={p.crop}
           plantedAt={p.plantedAt}
+          state={p.state}
           hint={!p.crop && afford}
           onPlot={onPlot}
           make={make}
@@ -325,9 +355,9 @@ function CountdownFloater({
   return null
 }
 
-// —— D6 地块状态环：干旱缺水橙红脉冲 > 已浇水蓝 > 已施肥绿，其余隐藏 ——
+// —— D6 地块状态环：干旱缺水橙红脉冲 > 已浇水蓝 > 已施肥绿 > withered 深棕无脉冲 ——
 
-function StatusRing({ index, crop }: { index: number; crop: CropId | null }) {
+function StatusRing({ index, crop, state }: { index: number; crop: CropId | null; state: PlotState }) {
   const ref = useRef<Mesh>(null)
 
   useFrame(() => {
@@ -338,7 +368,10 @@ function StatusRing({ index, crop }: { index: number; crop: CropId | null }) {
     let color = 0
     let opacity = 0
     let pulse = 0
-    if (drought && crop && isThirsty(crop) && !f?.watered) {
+    if (state === 'withered') {
+      color = 0x3e2723
+      opacity = 0.45
+    } else if (drought && crop && isThirsty(crop) && !f?.watered) {
       color = 0xff8c42
       opacity = 0.42
       pulse = 0.2
@@ -676,6 +709,49 @@ function EventsTicker({ plots }: { plots: SaveData['plots'] }) {
   return null
 }
 
+// —— D7 withered 恢复计时浮字 + 状态推动 ——
+
+/** D7：withered 地块头顶浮字 "🍂 荒废中… Xs"，节流 1s */
+function WitheredRecoverHint({ plots }: { plots: SaveData['plots'] }) {
+  const lastShownAtRef = useRef(0)
+
+  useFrame(() => {
+    const now = performance.now()
+    if (now - lastShownAtRef.current < 1000) return
+    // 寻找有 withered 状态的地块
+    for (let i = 0; i < plots.length; i++) {
+      const p = plots[i]
+      if (p.state !== 'withered') continue
+      const secs = getPlotStateRecoveryMs(i, Date.now(), plots)
+      if (secs <= 0) continue
+      const [px, pz] = plotPosition(i)
+      lastShownAtRef.current = now
+      queueFloater(px, 0.62, pz, `🍂 荒废中… ${secs}s`)
+      break // 每帧最多一个，避免栈炸
+    }
+  })
+  return null
+}
+
+/**
+ * D7：withered 状态自动恢复推动器。
+ * 节流到每帧检查一次是否需要更新 React state（通过 onTickPlots 回调）。
+ * 策略：onTickPlots 返回新数组 → setData 驱动重渲染 → FarmScene 重新接收含新 state 的 plots。
+ */
+function PlotStateTicker({ plots, onTickPlots }: { plots: SaveData['plots']; onTickPlots: (p: SaveData['plots']) => void }) {
+  const lastCheckRef = useRef(0)
+
+  useFrame(() => {
+    const now = performance.now()
+    // 节流到 1s 检查一次（tickPlot 最小粒度 8s，1s 节流足够）
+    if (now - lastCheckRef.current < 1000) return
+    lastCheckRef.current = now
+    const next = tickPlotStates(plots, Date.now())
+    if (next) onTickPlots(next)
+  })
+  return null
+}
+
 // —— 静态环境（memo + 实例只建一次）——
 
 const FenceRing = memo(function FenceRing() {
@@ -741,7 +817,7 @@ const Trees = memo(function Trees() {
   )
 })
 
-export default function FarmScene({ data, onPlot, onPest }: FarmSceneProps) {
+export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSceneProps) {
   const dirtGltf = useGLTF(ASSETS.dirt)
   const carrotGltf = useGLTF(ASSETS.carrot)
   const cornGltf = useGLTF(ASSETS.corn)
@@ -775,6 +851,8 @@ export default function FarmScene({ data, onPlot, onPest }: FarmSceneProps) {
         <FloaterBridge />
         <WeatherMood />
         <EventsTicker plots={data.plots} />
+        <WitheredRecoverHint plots={data.plots} />
+        <PlotStateTicker plots={data.plots} onTickPlots={onTickPlots} />
       </Suspense>
     </>
   )

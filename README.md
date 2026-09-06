@@ -1,6 +1,6 @@
 # farm-demo
 
-「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线逐字节零 diff）。当前进度：**Phase 0（双端骨架）已完成并复验，Phase 1 web 3D 原型 D1~D5 完成，D6 试玩反馈第一轮已落地**（生长进度条 + 作物差异化 + 惊喜事件系统）；Phase 2 移植到 `apps/mobile`（Expo + expo-gl）。进度总览见下方「进度」，验收勾选见 [docs/PRD.md](docs/PRD.md)。
+「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线零 diff——D7 主动破例重构，理由见 PROGRESS.md）。当前进度：**Phase 1 D6 进行中、D7/D8 计划已批准**（土地状态机 + 田园背景装饰）；详细 D 级轨迹见 [PROGRESS.md](PROGRESS.md)，验收勾选见 [docs/PRD.md](docs/PRD.md)。
 
 详细计划见 [docs/PRD.md](docs/PRD.md)，资产清单与授权见 [packages/assets/ASSETS.md](packages/assets/ASSETS.md)。
 
@@ -18,13 +18,15 @@ farm-demo/
 └── docs/            # PRD（含验收清单勾选进度）
 ```
 
-## 进度（2026-09-06）
+## 进度（2026-09-06；D7/D8 已批准待实施）
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
 | Phase 0 准备与骨架 | ✅ 完成（当日复验 4/4 + 源码审计清零） | workspaces / game 包零 diff / expo-gl×three 跑通 / 版本表 / gesture-handler 锁定 |
 | Phase 1 Web 原型 D1~D5 | ✅ 完成 | R3F 场景 + 核心循环 + 环绕相机 + 生长插值 + juice 四件套 + motion 动画规范（提交 61e0758 → 0cd6398） |
 | Phase 1 D6 冻结 | ⏳ 进行中 | ✅试玩反馈第一轮已落地（见下）；待：第二轮试玩、录屏、Chrome Perf 长任务数据 |
+| Phase 1 D7 状态机扩展 | ⏸ 已批准待实施 | 6 状态生命周期 + withered 限时自动恢复；破 game 包零 diff 红线（用户批准） |
+| Phase 1 D8 田园背景装饰 | ⏸ 已批准待实施 | 狗/路/茅草屋/鱼塘 + 2 个新 CC0 GLB；`farm3d/deco/` 子目录 |
 | Phase 2 RN 移植（9/13~） | ⬜ 未开始 | 渲染层 D1 冒烟后定：fiber native vs three 直写（倾向后者，背压循环已验证） |
 | Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
 

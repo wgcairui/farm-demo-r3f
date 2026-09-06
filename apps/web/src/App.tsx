@@ -14,7 +14,7 @@ const TRAITS: Record<CropId, string> = {
 }
 
 export default function App() {
-  const { data, handlePlot, handlePest, select, reset } = useFarm()
+  const { data, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
   const [fertMode, setFertMode] = useState(false)
 
   const pickSeed = (id: CropId) => {
@@ -37,7 +37,7 @@ export default function App() {
         camera={{ position: [4.6, 3.6, 5.8], fov: 42, near: 0.1, far: 100 }}
         onPointerDown={trackPointerDown}
       >
-        <FarmScene data={data} onPlot={handlePlot} onPest={handlePest} />
+        <FarmScene data={data} onPlot={handlePlot} onPest={handlePest} onTickPlots={tickPlots} />
       </Canvas>
 
       <header className="hud">

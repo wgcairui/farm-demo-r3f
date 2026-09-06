@@ -4,7 +4,7 @@
 // 时间模型仍是 packages/game 的 plantedAt 时间戳：事件不改游戏规则，
 // 只改"有效生长进度"（bonusMs），stageOf/progressOf 拿到的依旧是一个纯时间戳，
 // 与服务端方案的同构叙事不被破坏。
-import { CROPS, PLOT_COUNT, type CropId, type Plot } from '@farm/game'
+import { CROPS, PLOT_COUNT, tickPlot, type CropId, type Plot, type PlotState, WITHER_RECOVER_MS } from '@farm/game'
 import { queueFloater } from './floaters'
 import { plotPosition } from './layout'
 import { playDamage, playDrought, playPest, playRain } from './sfx'
@@ -103,7 +103,7 @@ function ensure(i: number): PlotFx {
 /** 事件偏移后的"有效播种种时间戳"——stageOf/progressOf 一律喂这个 */
 export function effPlot(p: Plot, i: number): Plot {
   const bonus = fx.get(i)?.bonusMs ?? 0
-  return p.plantedAt === null ? p : { crop: p.crop, plantedAt: p.plantedAt - bonus }
+  return p.plantedAt === null ? p : { crop: p.crop, plantedAt: p.plantedAt - bonus, state: p.state, witheredAt: p.witheredAt }
 }
 
 function isMature(p: Plot, i: number): boolean {
@@ -270,6 +270,41 @@ export function onHarvest(i: number): void {
 }
 export function isDamaged(i: number): boolean {
   return fx.get(i)?.dmg === true
+}
+
+// —— D7 withered 状态驱动 ——
+
+/**
+ * 推动所有 withered 地块的状态机。
+ * 如果某地块从 withered 转为 empty，同步清除事件附加层（fx.delete）。
+ * 返回新 plots 数组（仅当有 transition 时）；否则返回 null 让调用方跳过 setData。
+ */
+export function tickPlotStates(plots: Plot[], now: number): Plot[] | null {
+  let changed = false
+  const next = plots.map((p, i) => {
+    if (p.state !== 'withered') return p
+    const next = tickPlot(p, now)
+    // withered → empty 转换：清除事件附加层，避免恢复后还带减产/加成
+    if (next.state === 'empty') {
+      fx.delete(i)
+      flush()
+      changed = true
+    }
+    return next
+  })
+  return changed ? next : null
+}
+
+/**
+ * 返回 withered 地块距离自动恢复的剩余秒数（向上取整）。
+ * 非 withered 地块或已无 witheredAt 时返回 0。
+ */
+export function getPlotStateRecoveryMs(i: number, now: number, plots?: Plot[]): number {
+  const src = plots ?? lastPlots
+  const p = src[i]
+  if (!p || p.state !== 'withered' || p.witheredAt === null) return 0
+  const remain = WITHER_RECOVER_MS - (now - p.witheredAt)
+  return Math.max(0, Math.ceil(remain / 1000))
 }
 
 // —— 工具选择（施肥 vs 种子）与场景读取接口 ——
