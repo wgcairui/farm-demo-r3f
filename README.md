@@ -92,7 +92,7 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 
 - 模拟器 GLES→Metal 转译层**片元着色极慢**（分层实测：裸 clear 管线 4ms/帧、three 无物体 5ms、Basic 立方体 57ms、Lambert ~160ms、Standard/PBR 534ms）。
 - **视图点尺寸减半 = 像素 1/4 = 4 倍提速**（6→22fps，`SIM_DOWNSCALE` 常量控制）；`msaaSamples={1}` 无感（MSAA 非瓶颈）。
-- 结论：**低多边形风格配 MeshLambertMaterial**（r155+ Lambert 已逐像素光照，别指望它便宜多少，但比 Standard 便宜 3 倍+）；真机跑原生 GLES 无此瓶颈，上真机恢复全分辨率，预期 60fps（待真机验证）。
+- 结论：**低多边形风格配 MeshLambertMaterial**（r155+ Lambert 已逐像素光照，别指望它便宜多少，但比 Standard 便宜 3 倍+）；**真机首测（2026-09-06，用户 iPhone + Expo Go dev + 半分辨率档）：~40-43fps，为模拟器同档 2 倍**——但"真机 60fps"预期未证实，当前数字含 Expo Go dev 模式开销且视图仍是半分辨率档，正式测量环境是 Phase 2 的真机 dev build（D6 性能轮）。
 
 ### 待办（Phase 2 移植前）
 
