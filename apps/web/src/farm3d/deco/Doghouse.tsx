@@ -1,5 +1,6 @@
-// 狗屋：小尺寸茅草顶 + 圆拱门洞 + 门口骨头 + 餐盆。
-// 参考 QQ 农场风格，定位在 cottage 旁边；狗蹲在 DOG_POS（门口）。
+// 狗屋：小尺寸茅草顶 + 圆拱门洞。
+// 骨头和餐盆放在 cottage 门口附近（参考 QQ 农场布局）。
+// 狗蹲在 DOG_POS（cottage 门口正前方），朝 -x 看回 cottage。
 import { useMemo } from 'react'
 import {
   BoxGeometry,
@@ -11,10 +12,13 @@ import {
   SphereGeometry,
 } from 'three'
 
-/** 狗屋位置：cottage 右侧前方，朝地块方向 */
-export const DOGHOUSE_POS: [number, number, number] = [-2.4, 0, 2.3]
-/** 狗位置：狗屋门口外（z 朝地块方向，远离狗屋主体，避免嵌入墙壁） */
-export const DOG_POS: [number, number, number] = [-2.4, 0, 3.1]
+/**
+ * cottage 门世界坐标：[-2.575, 0, 2.5]
+ * 狗位置：cottage 门口前方偏右（避开门口视野，朝 -z 看回 cottage 方向）
+ * 狗屋位置：cottage 右侧远处
+ */
+export const DOG_POS: [number, number, number] = [-1.4, 0, 3.2]
+export const DOGHOUSE_POS: [number, number, number] = [-0.3, 0, 3.8]
 
 function buildDoghouse(): Group {
   const g = new Group()
@@ -85,27 +89,37 @@ function buildBowl(): Group {
 }
 
 /**
- * 狗屋 + 骨头 + 餐盆组合。
+ * 狗屋 + 骨头 + 餐盆组合（参考 QQ 农场布局）。
+ * - 狗屋放在 cottage 右侧远端
+ * - 骨头和餐盆放在 cottage 门口附近（参考图中狗在门口，骨头/餐盆在狗两侧）
+ *
  * 全部 metalness=0，flat tone mapping 由 Canvas 统一处理。
  */
 export default function Doghouse() {
   const group = useMemo(() => {
     const g = new Group()
-    g.add(buildDoghouse())
-    // 骨头在门口右侧（相对狗屋本地坐标 +x 是朝地块方向）
+
+    // 狗屋放 cottage 右侧远处（参考图右上角）
+    const house = buildDoghouse()
+    house.position.set(0.6, 0, 0.8) // 相对 cottage 门口（门口在 (-2.575, 0, 2.5)）
+    g.add(house)
+
+    // 骨头放在 cottage 门口右侧（参考图 dog 右下方）
     const bone = buildBone()
-    bone.position.set(0.45, 0.04, 0.5)
+    bone.position.set(-0.5, 0, 0.3) // 相对门口
     bone.rotation.y = 0.4
     g.add(bone)
-    // 餐盆在门口左侧
+
+    // 餐盆放在 cottage 门口前方偏左（参考图 dog 左前方）
     const bowl = buildBowl()
-    bowl.position.set(-0.45, 0, 0.5)
+    bowl.position.set(-0.5, 0, -0.3)
     g.add(bowl)
+
     return g
   }, [])
 
   return (
-    <group position={DOGHOUSE_POS}>
+    <group position={[-2.575, 0, 2.5]}>
       <primitive object={group} />
     </group>
   )

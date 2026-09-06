@@ -69,12 +69,13 @@ function buildCottage(): Group {
 /**
  * 程序化茅草屋。
  * 全部 metalness=0，flat tone mapping 已由 Canvas 统一处理。
+ * 整体绕 y 轴旋转 -90°，让门朝 +x 方向（朝地块）。
  */
 export default function Cottage() {
   const group = useMemo(() => buildCottage(), [])
 
   return (
-    <group position={COTTAGE_POS}>
+    <group position={COTTAGE_POS} rotation={[0, Math.PI / 2, 0]}>
       <primitive object={group} />
     </group>
   )
