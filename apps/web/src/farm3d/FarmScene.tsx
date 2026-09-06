@@ -24,14 +24,22 @@ import {
   tickEvents,
 } from './events'
 import {
+  consumeShake,
+  getLeafs,
   getPops,
   getCoins,
+  getShockwaves,
+  LEAF_MS,
   MAX_COINS,
   removePop,
+  SHOCKWAVE_MS,
   spawnHarvestPop,
+  spawnLeafBurst,
+  spawnShockwave,
+  triggerShake,
   updateCoins,
 } from './effects'
-import { mountFloaterDom, takeFloaters } from './floaters'
+import { mountFloaterDom, queueFloater, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
 import { DUR, ease } from './motion'
@@ -246,8 +254,8 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
           <primitive object={plant} />
         </group>
       )}
-      {/* D6：生长进度条（问的是"什么时候能收"）+ 地块状态环（渴/浇过/施过肥） */}
-      {crop && plantedAt !== null && <GrowthBar index={index} crop={crop} plantedAt={plantedAt} />}
+      {/* D6：倒计时浮字（QQ 农场风格：作物头顶小字，< 1 分钟换色+图标）+ 状态环 */}
+      {crop && plantedAt !== null && <CountdownFloater index={index} crop={crop} plantedAt={plantedAt} />}
       <StatusRing index={index} crop={crop} />
     </group>
   )
@@ -272,11 +280,13 @@ function Farm({ data, onPlot, make }: Pick<FarmSceneProps, 'data' | 'onPlot'> & 
   )
 }
 
-// —— D6 生长进度条：始终朝向相机的细条，绿→金色定格→淡出（成熟弹跳接棒信号）——
+// —— QQ 农场风格倒计时浮字：作物头顶小字 billboard，靠 FloaterBridge 投影到 DOM ——
+// 不用 Mesh 画文字（字太小看不清），改为：每帧根据剩余时间往 queueFloater 投递文本
+// （同一帧内同地块只投一次——把浮字状态记在 ref 里，避免帧内重投造成栈炸裂）。
+// 视觉风格：sprout/growing 期 `🌱 mm:ss`，成熟前 < 60s 切到 `🌾 00:XX` + 金色，
+// 成熟瞬间投递 `✨ +N金币` 直接交给普通浮字通道，不在此停留。
 
-const BAR_W = 0.44
-
-function GrowthBar({
+function CountdownFloater({
   index,
   crop,
   plantedAt,
@@ -285,60 +295,34 @@ function GrowthBar({
   crop: CropId
   plantedAt: number
 }) {
-  const grp = useRef<Group>(null)
-  const bg = useRef<Mesh>(null)
-  const fill = useRef<Mesh>(null)
-  const bornAt = useRef(performance.now())
-  const doneAt = useRef<number | null>(null)
+  const lastShownAtRef = useRef(0)
+  const [x, z] = plotPosition(index)
+  const y = crop === 'corn' ? 0.95 : 0.62
 
-  useFrame(({ camera }) => {
-    const g = grp.current
-    const b = bg.current
-    const f = fill.current
-    if (!g || !b || !f) return
-
-    const t = ease.clamp01(
-      progressOf({ crop, plantedAt: plantedAt - getBonus(index) }, Date.now()),
-    )
-    if (t >= 1 && doneAt.current === null) doneAt.current = performance.now()
-
+  useFrame(() => {
+    const def = CROPS[crop]
+    const total = def.stageMs[0] + def.stageMs[1]
+    const remain = Math.max(0, plantedAt + total - Date.now() + getBonus(index))
+    const mature = remain <= 0
+    // 节流：每秒最多投递一次新浮字（mature 同样限流，否则"✨ 可收获"会按帧堆栈）
     const now = performance.now()
-    let opacity = Math.min(1, (now - bornAt.current) / DUR.fast)
-    if (doneAt.current !== null) {
-      // 成熟后金色定格 DUR.slow 再淡出，把"可收获"让位给作物弹跳
-      const k = (now - doneAt.current) / DUR.slow
-      if (k >= 1) {
-        g.visible = false
-        return
-      }
-      opacity *= 1 - k
-    }
-    g.visible = true
-    g.quaternion.copy(camera.quaternion)
+    if (now - lastShownAtRef.current < 1000) return
+    lastShownAtRef.current = now
 
-    const bm = b.material as MeshBasicMaterial
-    const fm = f.material as MeshBasicMaterial
-    bm.opacity = 0.55 * opacity
-    fm.opacity = opacity
-    fm.color.set(t >= 1 ? 0xffd24a : 0x8ee06a)
-    fm.color.multiplyScalar(opacity < 1 ? opacity : 1)
-    f.scale.x = Math.max(0.001, t)
-    f.position.x = -BAR_W / 2 + (BAR_W * t) / 2
+    let text: string
+    if (mature) {
+      text = '✨ 可收获'
+    } else {
+      const secs = Math.ceil(remain / 1000)
+      const mm = Math.floor(secs / 60)
+      const ss = secs % 60
+      const icon = secs <= 60 ? '🌾' : '🌱'
+      text = `${icon} ${mm}:${ss.toString().padStart(2, '0')}`
+    }
+    queueFloater(x, y, z, text)
   })
 
-  const y = crop === 'corn' ? 0.95 : 0.62
-  return (
-    <group ref={grp} position={[0, y, 0]}>
-      <mesh ref={bg} raycast={() => null}>
-        <planeGeometry args={[BAR_W, 0.07]} />
-        <meshBasicMaterial color={0x2e2416} transparent opacity={0.55} depthWrite={false} />
-      </mesh>
-      <mesh ref={fill} raycast={() => null}>
-        <planeGeometry args={[BAR_W - 0.04, 0.042]} />
-        <meshBasicMaterial color={0x8ee06a} transparent depthWrite={false} />
-      </mesh>
-    </group>
-  )
+  return null
 }
 
 // —— D6 地块状态环：干旱缺水橙红脉冲 > 已浇水蓝 > 已施肥绿，其余隐藏 ——
@@ -488,7 +472,7 @@ function RainParticles() {
   )
 }
 
-// —— D4 特效层 ——
+// —— D6 收获动效层（作物起跳 + 径向金光 + 叶子碎屑）——
 
 /** 收获弹出：作物起跳 + 先胀后缩 + 自旋（DUR.slow） */
 function PopLayer() {
@@ -518,6 +502,111 @@ function PopLayer() {
   })
 
   return <group ref={groupRef} />
+}
+
+/** 径向金光：圆环从中心向外扩散 + 不透明度衰减（SHOCKWAVE_MS） */
+function Shockwave() {
+  const meshRef = useRef<Mesh>(null)
+  const matRef = useRef<MeshBasicMaterial>(null)
+
+  useFrame(() => {
+    const m = meshRef.current
+    const mat = matRef.current
+    if (!m || !mat) return
+    const list = getShockwaves()
+    const now = performance.now()
+    let visible = false
+    let radius = 0.1
+    let opacity = 0
+    let cx = 0
+    let cz = 0
+    for (const s of list) {
+      const t = (now - s.born) / SHOCKWAVE_MS
+      if (t >= 1) continue
+      const k = ease.outQuad(t)
+      radius = 0.1 + 1.6 * k
+      opacity = (1 - k) * 0.85
+      visible = true
+      cx = s.x
+      cz = s.z
+      break
+    }
+    m.visible = visible
+    if (visible) {
+      m.position.x = cx
+      m.position.z = cz
+      m.scale.setScalar(radius)
+      mat.opacity = opacity
+    }
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (now - list[i].born > SHOCKWAVE_MS) list.splice(i, 1)
+    }
+  })
+
+  return (
+    <mesh ref={meshRef} rotation-x={-Math.PI / 2} position={[0, 0.04, 0]} visible={false} raycast={() => null}>
+      <ringGeometry args={[0.28, 0.36, 48]} />
+      <meshBasicMaterial
+        ref={matRef}
+        color={0xffe27a}
+        transparent
+        opacity={0}
+        depthWrite={false}
+        side={2 as const}
+      />
+    </mesh>
+  )
+}
+
+/** 叶子碎屑：左右溅射的绿色小方块（带旋转 + 重力落地） */
+function LeafBurst() {
+  const meshRef = useRef<InstancedMesh>(null)
+  const dummy = useMemo(() => new Object3D(), [])
+
+  useFrame((_, dt) => {
+    const m = meshRef.current
+    if (!m) return
+    const list = getLeafs()
+    const now = performance.now()
+    const d = Math.min(dt, 0.05)
+    for (let i = list.length - 1; i >= 0; i--) {
+      const l = list[i]
+      l.vy -= 6.5 * d
+      l.x += l.vx * d
+      l.y += l.vy * d
+      l.z += l.vz * d
+      l.vx *= 0.97
+      l.vz *= 0.97
+      l.rot += l.rotSpd * d
+      if (l.y < 0.02) {
+        l.y = 0.02
+        l.vy *= -0.3
+        l.vx *= 0.6
+        l.vz *= 0.6
+      }
+      if (now - l.born > LEAF_MS) list.splice(i, 1)
+    }
+    const count = Math.min(list.length, 16)
+    m.count = count
+    for (let i = 0; i < count; i++) {
+      const l = list[i]
+      dummy.position.set(l.x, l.y, l.z)
+      dummy.rotation.set(l.rot * 0.6, l.rot, l.rot * 0.3)
+      const age = (now - l.born) / LEAF_MS
+      const sc = age < 0.7 ? 1 : Math.max(0, 1 - (age - 0.7) / 0.3)
+      dummy.scale.setScalar(0.07 * sc)
+      dummy.updateMatrix()
+      m.setMatrixAt(i, dummy.matrix)
+    }
+    m.instanceMatrix.needsUpdate = true
+  })
+
+  return (
+    <instancedMesh ref={meshRef} args={[undefined!, undefined!, 16]} frustumCulled={false}>
+      <planeGeometry args={[1, 1]} />
+      <meshLambertMaterial color={0x6ec24a} side={2 as const} />
+    </instancedMesh>
+  )
 }
 
 /** 金币粒子：固定 64 实例的 InstancedMesh 池，闲置实例缩放归零；存活 slow+fast，尾部 fast 档收缩 */
@@ -572,6 +661,7 @@ function FloaterBridge() {
           (v.x * 0.5 + 0.5) * size.width,
           (-v.y * 0.5 + 0.5) * size.height,
           f.text,
+          f.hero === true,
         )
       }
     }
@@ -679,6 +769,8 @@ export default function FarmScene({ data, onPlot, onPest }: FarmSceneProps) {
         <PestBug onPest={onPest} />
         <RainParticles />
         <PopLayer />
+        <Shockwave />
+        <LeafBurst />
         <CoinParticles />
         <FloaterBridge />
         <WeatherMood />

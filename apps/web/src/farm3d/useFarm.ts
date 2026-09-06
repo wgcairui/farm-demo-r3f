@@ -15,8 +15,8 @@ import {
   tryFertilize,
   tryWater,
 } from './events'
-import { spawnCoinBurst } from './effects'
-import { queueFloater } from './floaters'
+import { spawnCoinBurst, spawnLeafBurst, spawnShockwave, triggerShake } from './effects'
+import { clearFloaters, queueFloater } from './floaters'
 import { plotPosition } from './layout'
 import { playCoin, playFertilize, playHarvest, playPlant, playSplash, playSquash } from './sfx'
 
@@ -86,10 +86,16 @@ export function useFarm() {
         plots[i] = { crop: null, plantedAt: null }
         return { ...d, plots, coins: d.coins + gain }
       })
+      // 五件套主菜动效：震屏 + 径向金光 + 叶子碎屑 + 爆金币粒子 + 大字符浮字
+      // 先清旧浮字避免主菜 +N 被 "✨ 可收获" 栈压住
+      clearFloaters()
+      triggerShake(isDamaged(i) ? 'soft' : 'normal')
+      spawnShockwave(px, pz)
+      spawnLeafBurst(px, 0.5, pz, 8)
       playHarvest()
       window.setTimeout(playCoin, 90)
       spawnCoinBurst(px, 0.3, pz)
-      queueFloater(px, 0.75, pz, `+${gain}${isDamaged(i) ? ' 🐛' : ''}`)
+      queueFloater(px, 0.85, pz, `+${gain}${isDamaged(i) ? ' 🐛' : ''}`, { hero: true })
       onHarvest(i)
     }
   }, [])
