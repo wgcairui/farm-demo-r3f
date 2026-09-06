@@ -2,16 +2,17 @@
 
 本文件沉淀每一轮「批准 → 实施 → 验收」的轨迹。README 顶部只保留一句「当前在哪」，PRD §5 是权威工作步骤拆分，本表是 D 级别 + commit 级别的实时状态。
 
-最近更新：2026-09-06（D7~D10 全部完成 + cc/Vercel 双线部署落地，prod 字节级一致）
+最近更新：2026-09-06（D7~D10 全部完成 + Vercel 单线部署；cc 链路同日下线）
 
 ---
 
 ## 当前状态
 
-**Phase 1 D7~D10 全部完成**，prod 双线部署就位（cc 主站 + Vercel CDN 备用，HTML MD5 + JS bundle 字节级一致）。
+**Phase 1 D7~D10 全部完成**，prod 单线部署：Vercel CDN。
 
-- 主站 prod：https://game.ladishb.com/（cc + Docker + nginx 反代）
-- Vercel prod：https://farm-demo-gamma.vercel.app
+- 主站 prod：https://farm-demo-gamma.vercel.app
+
+cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现在返回 410 Gone）。详见 README「cc 部署历史」+ D11 实施回顾（待 commit）。
 
 ---
 
@@ -39,6 +40,7 @@
 | D8 | ✅ | 田园背景装饰：程序化柯基 + 狗屋 + 石板路 + 池塘（无 GLB） + 2 轮 review fix | `48bfb91`、`8bd9878`、`4e6f8ce`、`cf704df`、`d4b087a` |
 | **D9** | ✅ | **部署基建**：apps/web Dockerfile（multi-stage npm builder → nginx:alpine）+ vercel.json + `.vercelignore` | `92aa065`、`a7e1703`、`0dc66fe`、`e05bef5` |
 | **D10** | ✅ | **菜园入口 + 仓库**：FenceRing 留缺口 + 石板路穿过 + 程序化木墙茅草顶仓库 | `8b21752` |
+| **D11** | ✅ | **cc 部署下线**：停 farm-web 容器 + 删镜像 + 删 game.ladishb.com nginx vhost + 410 Gone 兜底 + 删 cc 上 farm-demo-r3f 仓库 | （待） |
 
 ### D7 实施回顾
 
@@ -89,6 +91,31 @@
 - 新增 `apps/web/src/farm3d/deco/Warehouse.tsx`：程序化木墙（暗木色 0xb8924a）+ 茅草顶 + 大双木门（深棕 + 黑门缝 + 浅黄把手）+ 浅黄牌匾 + 双通风窗
 - 位置 [-3.5, 0, -2.5]，cottage 正后方；整体旋转 +90° 门朝 +x 朝菜园
 - `deco/index.tsx` 接入
+
+### D11 实施回顾（cc 部署下线）
+
+**目标**：彻底移除 cc + Docker 部署链路，保留 prod 单线部署（Vercel）。
+
+**关键动作**（2026-09-06 22:43 UTC+8）：
+
+1. **停 + 删容器 + 删镜像**：`docker stop docker-farm-web-1 && docker rm docker-farm-web-1 && docker rmi farm-demo-web:latest`
+2. **从 docker-compose.yml 删 farm-web service**：用 python 脚本扫 4-space 缩进的顶级 key，匹配 `farm-web:` 就跳过直到下一个 service
+3. **从 nginx.conf 删 game.ladishb.com 的 server 块（80 重定向 + 443 反代）**：用 python 大括号 stack 匹配，删包含 `game.ladishb.com` 的所有 server 块（23 → 21）
+4. **加 410 Gone 兜底**：nginx.conf 末尾追加新 server 块，`return 410;`，防止 game.ladishb.com 落到其他 default server（如 ladisadmin Next.js）。DNS A 记录保留指向 cc IP，未来恢复部署只删这个兜底块即可。
+5. **nginx reload**：`docker exec docker-nginx-1 nginx -t && nginx -s reload`，语法 OK，http2 弃用 warning 无害
+6. **删 cc 上的 farm-demo-r3f 仓库** + `/tmp/farm-demo-web.tar.gz` + `/tmp/game-ladishb-vhost.conf` + 备份文件
+
+**踩坑沉淀**：
+1. **删 nginx vhost 后会落到 default server**：443 端口有 9 个 server 块监听，删 game.ladishb.com 后请求落到第一个匹配的 server（ladisadmin），返回 Next.js 站点内容。**必须加 410 兜底**，否则域名被劫持到无关服务。
+2. **410 vs 404**：410 Gone 明确告诉客户端资源永久不存在，不被浏览器/CDN 缓存。如选 404，浏览器可能继续 cache + 反复请求；如选 redirect 到其他站，会被搜索引擎索引。
+3. **DNS 不用动**：保留 A 记录指向 cc IP（116.62.48.175）+ nginx 410 响应，未来恢复部署只删 410 兜底块 + 重建反代。
+4. **删容器顺序**：必须先 `docker stop` → `docker rm` → `docker rmi`，否则 image 有引用时 rmi 报错（`must force`）。
+5. **compose down/up vs 直接操作**：`docker compose up -d` 会读取 compose 文件重建容器，所以从 compose 删 service + 直接删容器两步都要做，单删容器下次 up 会重建。
+
+**最终状态**：
+- `https://game.ladishb.com/` → HTTP/2 **410 Gone**（之前 200 + 小满农场 3D）
+- `https://farm-demo-gamma.vercel.app` → HTTP/2 200（Vercel CDN 唯一 prod 站点）
+- cc 上无 farm-demo 任何痕迹（容器、镜像、仓库、临时文件全清）
 
 ---
 

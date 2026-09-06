@@ -18,7 +18,7 @@ farm-demo/
 └── docs/            # PRD（含验收清单勾选进度）
 ```
 
-## 进度（2026-09-06；D7~D10 完成 + cc/Vercel 双线部署落地）
+## 进度（2026-09-06；D7~D10 完成 + Vercel 单线部署）
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
@@ -27,7 +27,7 @@ farm-demo/
 | Phase 1 D6 反馈轮 | ✅ 完成 | 生长进度条 + 作物差异化 + 雨/旱/虫/施肥事件系统（提交 6b7baf1） |
 | Phase 1 D7 状态机扩展 | ✅ 完成 | 6 状态生命周期 + withered 8s 自动恢复 + v1→v2 存档迁移；破 game 包零 diff 红线（用户批准） |
 | Phase 1 D8 田园背景装饰 | ✅ 完成 | 程序化柯基 + 狗屋 + 池塘 + 石板路（提交 48bfb91 → 4e6f8ce + 两轮 review fix） |
-| Phase 1 D9 部署基建 | ✅ 完成 | Dockerfile（multi-stage npm builder → nginx）+ vercel.json（见部署章节） |
+| Phase 1 D9 部署基建 | ✅ 完成 | Dockerfile + vercel.json + `.vercelignore`（cc 链路 2026-09-06 下线） |
 | Phase 1 D10 菜园入口 + 仓库 | ✅ 完成 | FenceRing 留缺口 + 石板路穿过 + 程序化木墙茅草顶仓库 |
 | Phase 2 RN 移植（9/13~） | ⬜ 未开始 | 渲染层 D1 冒烟后定：fiber native vs three 直写（倾向后者，背压循环已验证） |
 | Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
@@ -66,41 +66,11 @@ farm-demo/
 
 ## 部署
 
-支持两套独立部署链路，**两套 prod 站点当前都跑着同一份代码（HTML MD5 + JS bundle 字节完全一致）**：
+**当前 prod 站点（单线部署）**：https://farm-demo-gamma.vercel.app （Vercel CDN）
 
-| 链路 | URL | 状态 | 适用 |
-|---|---|---|---|
-| cc + Docker（主站） | https://game.ladishb.com/ | ✅ healthy | 自建小服务器 + 自定义域名 |
-| Vercel（CDN 备用） | https://farm-demo-gamma.vercel.app | ✅ Ready | 演示/分享/免维护 |
+曾双线部署（cc 自建 + Vercel），2026-09-06 下线 cc 一侧（详见末尾「cc 部署历史」）。当前所有部署链路相关命令、踩坑沉淀都围绕 Vercel。
 
-### A. 自建 cc + Docker（生产在跑）
-
-`~/Web/docker/docker-compose.yml` 已有 `farm-web` 服务（端口 `172.18.0.1:9063:80`），nginx vhost 反代 `game.ladishb.com` 到此端口。
-
-```bash
-# 本地：构建 amd64 镜像（Mac 默认 arm64，cc 是 amd64，平台错位会 exec format error）
-docker buildx build --no-cache --platform linux/amd64 \
-  -f apps/web/Dockerfile -t farm-demo-web:latest --load .
-
-# 导出 + 推送到 cc
-docker save farm-demo-web:latest | gzip > /tmp/farm-demo-web.tar.gz
-scp /tmp/farm-demo-web.tar.gz cc:/tmp/
-
-# cc：加载 + 重启容器
-ssh cc 'docker load -i /tmp/farm-demo-web.tar.gz && \
-  cd ~/Web/docker && docker compose up -d farm-web'
-
-# 验证
-curl -sI https://game.ladishb.com/ | head -3   # HTTP/2 200
-```
-
-**踩坑（必读）**：
-1. **平台错位**：Mac M1 默认 `docker build` 出 arm64，cc 是 amd64 → 容器 `exec format error`。强制 `--platform linux/amd64`。
-2. **Dockerfile 漏 COPY mobile**：原 Dockerfile 只 COPY `apps/web/package.json`，npm ci 漏装 `@react-three/fiber` / `three` / `@types/three`，tsc 7 strict 报 `Cannot find module 'three'` + `Property 'mesh' does not exist on JSX.IntrinsicElements`。修复：补 `COPY apps/mobile/package.json ./apps/mobile/`（mobile 包声明了这些依赖）。
-3. **tsc 7.0.2 strict-only 错误**：本地 tsc 6.0.3 不报、docker 里 tsc 7 会报：`Promise<GLTF> | undefined` narrow、`traverse(o)` 隐式 any。Dockerfile `cd apps/web && npm run build` 让 tsc 用 apps/web 局部 7.0.2；剩余 4 个错误在 `apps/web/src/farm3d/gltf.ts` 显式标注类型。
-4. **`tsc` 失败但 dist 仍存在**：buildkit 把 `npm run build` 的 stderr/stdout 一起 tail，tsc exit code 1 被 `&&` 后的 `vite build` 覆盖前 dist 已被缓存——曾导致 prod 跑旧版。**判断 deploy 成功必须看 container status healthy + 浏览器加载新 bundle**，不能只看 build log。
-
-### B. Vercel（CDN 备用，已跑通）
+### Vercel（一键部署，当前主站）
 
 ```bash
 # 首次
@@ -116,7 +86,7 @@ vercel --prod                  # 部署到 prod
 - `outputDirectory`: `apps/web/dist`
 - `installCommand`: `npm install --workspaces --include-workspace-root`（workspaces 单副本）
 - `rewrites`: SPA fallback → `/index.html`
-- `headers`: `/assets/*` 长缓存 + `/index.html` 不缓存（同 nginx.conf）
+- `headers`: `/assets/*` 长缓存 + `/index.html` 不缓存
 
 `.vercelignore` 已配（关键）：
 
@@ -139,28 +109,62 @@ apps/web/dist
 3. **preview deployment 密码保护**：`farm-demo-<hash>-cairuis-projects.vercel.app` 这种带 hash 的原始 URL 默认开启 Vercel SSO 302 重定向（避免 preview abuse）。**production 别名**（项目级 `farm-demo-gamma.vercel.app`）才是公开 URL，分享链接用别名。
 4. **CLI 升级陷阱**：旧 CLI（`/Users/cairui/.bun/bin/vercel` 50.18.2）PATH 优先级可能高于 npm 全局新版。升级后 `which vercel` 仍指向旧版 → 删 bun 旧符号链接 `rm /Users/cairui/.bun/bin/vercel` 让 `/opt/homebrew/bin/vercel`（npm 全局）接管。
 
-**cc vs Vercel 取舍**：
-- **cc**：自建可控、复用现有 nginx + 域名、不依赖第三方；但要维护 Docker + 镜像同步链路
-- **Vercel**：零运维、CI/CD 一行；但免费档有 100GB 带宽/月限制，超出按量计费
-- **当前**：cc 是 prod 主站（自定义域名），Vercel 可作面试现场分享链接 / 临时 demo / 多 region CDN 兜底
+---
 
-### C. 字节级一致性验证（2026-09-06 实测）
+### cc 部署历史（2026-09-06 已下线）
 
-D10 commit `8b21752` push 后两套 prod 同步跑：
+cc + Docker 部署链路曾是主站，2026-09-06 用户决定下线。保留本节作为踩坑档案，**未来如需恢复 cc 部署**，可参照此流程反推。
+
+#### 完整清理动作记录
 
 ```bash
-# Vercel (alias)
-curl -s https://farm-demo-gamma.vercel.app/ | md5
-# → 0586753a396a6787e53a377c8cb25756
+# 本地：构建 amd64 镜像
+docker buildx build --no-cache --platform linux/amd64 \
+  -f apps/web/Dockerfile -t farm-demo-web:latest --load .
 
-# cc (custom domain)
-curl -s https://game.ladishb.com/ | md5
-# → 0586753a396a6787e53a377c8cb25756    ← 完全相同
+# 推送到 cc
+docker save farm-demo-web:latest | gzip > /tmp/farm-demo-web.tar.gz
+scp /tmp/farm-demo-web.tar.gz cc:/tmp/
 
-# JS bundle 两站都是 index-BGlLWr4T.js 1170543 bytes
+# cc：加载 + 启动
+ssh cc 'docker load -i /tmp/farm-demo-web.tar.gz && \
+  cd ~/Web/docker && docker compose up -d farm-web'
 ```
 
-**意义**：相同源码 → 相同 dist → 字节级一致的 HTML 产物。任何一站修 bug 重新部署后跑一次这个对比就能确认两站是否同步。
+#### 下线清理动作（实际执行，2026-09-06 22:43 UTC+8）
+
+```bash
+# 1. 停 + 删容器 + 删镜像
+ssh cc 'docker stop docker-farm-web-1 && docker rm docker-farm-web-1 && docker rmi farm-demo-web:latest'
+
+# 2. 从 docker-compose.yml 删除 farm-web service block
+ssh cc 'cd ~/Web/docker && python3 -c "..."'   # 见 commit diff
+
+# 3. 从 nginx.conf 删除 game.ladishb.com 的 server 块（80 重定向 + 443 反代）
+ssh cc 'cd ~/Web/docker && python3 -c "..."'
+
+# 4. nginx.conf 末尾追加 410 Gone 兜底（防止 game.ladishb.com 落到其他 default server）
+ssh cc 'cat >> /home/cc/Web/docker/nginx.conf << EOF
+server { listen 80; listen 443 ssl http2; server_name game.ladishb.com; ...; return 410; }
+EOF'
+ssh cc 'docker exec docker-nginx-1 nginx -s reload'
+
+# 5. 删除 cc 上的 farm-demo-r3f 仓库 + 临时文件
+ssh cc 'rm -rf ~/Web/farm-demo-r3f /tmp/farm-demo-web.tar.gz /tmp/game-ladishb-vhost.conf'
+
+# 6. 验证
+curl -Ik https://game.ladishb.com/   # HTTP/2 410 Gone
+```
+
+**为什么 410 不是 404**：410 Gone 明确告诉客户端资源永久不存在，不会被浏览器/CDN 缓存。`game.ladishb.com` 的 DNS A 记录仍指向 cc IP（116.62.48.175），未来如恢复 cc 部署只需删除 410 server 块 + 重建反代即可，DNS 不用动。
+
+#### cc 链路踩坑沉淀（保留供参考）
+
+1. **平台错位**：Mac M1 默认 `docker build` 出 arm64，cc 是 amd64 → 容器 `exec format error`。强制 `--platform linux/amd64`。
+2. **Dockerfile 漏 COPY mobile**：原 Dockerfile 只 COPY `apps/web/package.json`，npm ci 漏装 `@react-three/fiber` / `three` / `@types/three`，tsc 7 strict 报 `Cannot find module 'three'` + `Property 'mesh' does not exist on JSX.IntrinsicElements`。修复：补 `COPY apps/mobile/package.json ./apps/mobile/`。
+3. **tsc 7.0.2 strict-only 错误**：本地 tsc 6.0.3 不报、docker 里 tsc 7 会报：`Promise<GLTF> | undefined` narrow、`traverse(o)` 隐式 any。Dockerfile `cd apps/web && npm run build` 让 tsc 用 apps/web 局部 7.0.2；剩余 4 个错误在 `apps/web/src/farm3d/gltf.ts` 显式标注类型。
+4. **`tsc` 失败但 dist 仍存在**：buildkit 把 `npm run build` 的 stderr/stdout 一起 tail，tsc exit code 1 被 `&&` 后的 `vite build` 覆盖前 dist 已被缓存——曾导致 prod 跑旧版。**判断 deploy 成功必须看 container status healthy + 浏览器加载新 bundle**，不能只看 build log。
+5. **nginx.conf vhost 位置**：cc 上 nginx 跑在 `docker-nginx-1` 容器内，配置通过 volume 挂载 `/home/cc/Web/docker/nginx.conf` → 容器内 `/etc/nginx/conf.d/default.conf`。改完必须 `docker exec docker-nginx-1 nginx -s reload`。
 
 ## 快速开始
 
