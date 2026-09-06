@@ -12,3 +12,14 @@ apps/web/dist
 apps/web/.playwright-cli
 **/*.log
 **/.DS_Store
+# 根目录意外散落的截图/测试产物（之前 D12 audit 时被 killed 的 agent 在仓库根目录写入了 8 张 PNG）
+# 用 glob 而非固定文件名，避免下次再污染
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.mp4
+/*.webm
+/test-*.py
+/test-*.js
+/test-*.mjs
