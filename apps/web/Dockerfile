@@ -13,6 +13,7 @@ WORKDIR /app
 # 先 copy workspaces 元信息，让 Docker 缓存 deps 层（避免源码改动就重 install）
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/
+COPY apps/mobile/package.json ./apps/mobile/
 COPY packages/game/package.json ./packages/game/
 COPY packages/assets/package.json ./packages/assets/
 

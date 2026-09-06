@@ -3,17 +3,17 @@
 // 入场前统一"归一化"：按目标高度/宽度重定标、XZ 居中、底面贴 y=0、开阴影。
 import { use } from 'react'
 import { Box3, Group, Mesh, MeshStandardMaterial, Object3D, Vector3 } from 'three'
-import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 const loader = new GLTFLoader()
 const cache = new Map<string, Promise<GLTF>>()
 
 export function loadGLTF(url: string): Promise<GLTF> {
-  let p = cache.get(url)
-  if (!p) {
-    p = loader.loadAsync(url)
-    cache.set(url, p)
-  }
+  const cached = cache.get(url)
+  if (cached) return cached
+  const p = loader.loadAsync(url)
+  cache.set(url, p)
   return p
 }
 
@@ -51,7 +51,7 @@ export function normalized(src: Object3D, opts: NormalizeOpts): Group {
   obj.position.z -= center.z
   obj.position.y -= box2.min.y
 
-  obj.traverse((o) => {
+  obj.traverse((o: Object3D) => {
     const m = o as Mesh
     if (m.isMesh) {
       m.castShadow = true
