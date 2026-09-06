@@ -11,6 +11,8 @@
 | `models/farm-dirt.glb` | Farm Dirt | Quaternius | CC0 1.0 | `8BQFbUMOeC` | 17KB |
 | `models/fence.glb` | Fence | Quaternius | CC0 1.0 | `e02PFKKhbr` | 10KB |
 | `models/trees.glb` | Trees（多树合集，Phase 1 拆选单体后可精简） | Quaternius | CC0 1.0 | `etFGNvsiFv` | 3.3MB |
+| `models/dog.glb` | Dog（田园巡逻犬） | Quaternius | CC0 1.0 | TBD（poly.pizza 模型页 404，待查找 UUID） | TBD |
+| `models/cottage.glb` | Cottage（茅草屋） | Quaternius | CC0 1.0 | TBD（poly.pizza 模型页 404，待查找 UUID） | TBD |
 
 ## 待补（Phase 1 按需）
 

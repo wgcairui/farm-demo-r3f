@@ -40,6 +40,7 @@ import {
   triggerShake,
   updateCoins,
 } from './effects'
+import { DecoLayer } from './deco'
 import { mountFloaterDom, queueFloater, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
@@ -842,6 +843,7 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
         <Farm data={data} onPlot={onPlot} make={make} />
         <FenceRing />
         <Trees />
+        <DecoLayer />
         <PestBug onPest={onPest} />
         <RainParticles />
         <PopLayer />
