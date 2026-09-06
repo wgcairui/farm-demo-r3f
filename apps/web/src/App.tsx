@@ -22,9 +22,10 @@ export default function App() {
 
       <header className="hud">
         <span className="hud-title">🧑‍🌾 小满农场</span>
-        <span className="hud-badge">Phase 1 · D4 juice</span>
+        <span className="hud-badge">Phase 1 · D5 手感</span>
       </header>
-      <div className="coins">🪙 {data.coins}</div>
+      {/* key=coins：数字变化即重挂载，重放 150ms（DUR.fast）跳动 */}
+      <div key={data.coins} className="coins">🪙 {data.coins}</div>
 
       <div className="seedbar">
         {(Object.keys(CROPS) as CropId[]).map((id) => {

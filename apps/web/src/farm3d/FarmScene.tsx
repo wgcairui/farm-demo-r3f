@@ -1,6 +1,6 @@
 import { memo, Suspense, useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import type { Group, InstancedMesh } from 'three'
+import type { Group, InstancedMesh, Mesh, MeshBasicMaterial } from 'three'
 import { Object3D, Vector3 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CROPS, type CropId, type SaveData } from '@farm/game'
@@ -17,6 +17,7 @@ import {
 import { mountFloaterDom, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
+import { DUR, ease } from './motion'
 
 export interface FarmSceneProps {
   data: SaveData
@@ -94,17 +95,22 @@ interface PlotViewProps {
   index: number
   crop: CropId | null
   plantedAt: number | null
+  /** 空地提示环：仅当选中种子买得起且地块为空 */
+  hint: boolean
   onPlot: (i: number) => void
   make: MakeMap
 }
 
-function PlotView({ index, crop, plantedAt, onPlot, make }: PlotViewProps) {
+function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps) {
   const [x, z] = plotPosition(index)
   const dirt = useMemo(() => make.dirt(), [make])
   const plant = useMemo(() => (crop ? make[crop]() : null), [crop, make])
 
   const scaleGroupRef = useRef<Group>(null)
+  const hintRef = useRef<Group>(null)
   const squashAtRef = useRef<number | null>(null)
+  const matureBounceAtRef = useRef<number | null>(null)
+  const wasMatureRef = useRef(false)
   const stateRef = useRef<{ crop: CropId | null; plant: Group | null }>({ crop, plant })
 
   // 播种/收获的边界检测：播种 → 压弹；收获 → 把旧模型交给 PopLayer 起跳消失
@@ -116,26 +122,47 @@ function PlotView({ index, crop, plantedAt, onPlot, make }: PlotViewProps) {
   }, [crop, plant, x])
 
   useFrame(() => {
-    const g = scaleGroupRef.current
-    if (!g) return
+    const now = performance.now()
 
-    // 生长连续插值：Date.now 对齐 plantedAt 的时间基（帧级平滑，不等 500ms 心跳）
+    // 空地提示呼吸（D5）
+    if (hintRef.current) {
+      const k = Math.sin((now / 1000) * Math.PI * 1.2)
+      hintRef.current.scale.setScalar(1 + 0.06 * k)
+      const ring = hintRef.current.children[0] as Mesh
+      ;(ring.material as MeshBasicMaterial).opacity = 0.28 + 0.18 * k
+    }
+
+    // 生长连续插值：Date.now 对齐 plantedAt 的时间基（帧级平滑，不等重渲染）
     let base = 0.08
     if (crop && plantedAt) {
       const def = CROPS[crop]
-      const t = Math.min(1, Math.max(0, (Date.now() - plantedAt) / (def.stageMs[0] + def.stageMs[1])))
-      base = 0.08 + 0.92 * (1 - Math.pow(1 - t, 3))
+      const t = ease.clamp01((Date.now() - plantedAt) / (def.stageMs[0] + def.stageMs[1]))
+      // 成熟瞬间的一次弹跳（D5：可收获信号）
+      if (t >= 1 && !wasMatureRef.current) matureBounceAtRef.current = now
+      wasMatureRef.current = t >= 1
+      base = 0.08 + 0.92 * ease.outCubic(t)
+    } else {
+      wasMatureRef.current = false
     }
 
-    // 播种压弹：300ms 内先压到 ~0.55× 再弹回
+    // 播种压弹（DUR.base）
     let squash = 1
     if (squashAtRef.current !== null) {
-      const t = (performance.now() - squashAtRef.current) / 300
+      const t = (now - squashAtRef.current) / DUR.base
       if (t >= 1) squashAtRef.current = null
-      else squash = 1 - 0.45 * Math.sin(t * Math.PI)
+      else squash = 1 - 0.45 * ease.sinPing(t)
     }
 
-    g.scale.setScalar(base * squash)
+    // 成熟弹跳（DUR.base）
+    let bounce = 1
+    if (matureBounceAtRef.current !== null) {
+      const t = (now - matureBounceAtRef.current) / DUR.base
+      if (t >= 1) matureBounceAtRef.current = null
+      else bounce = 1 + 0.22 * ease.sinPing(t)
+    }
+
+    const g = scaleGroupRef.current
+    if (g) g.scale.setScalar(base * squash * bounce)
   })
 
   return (
@@ -149,6 +176,14 @@ function PlotView({ index, crop, plantedAt, onPlot, make }: PlotViewProps) {
       onPointerOut={() => (document.body.style.cursor = 'auto')}
     >
       <primitive object={dirt} />
+      {!crop && hint && (
+        <group ref={hintRef} position={[0, 0.07, 0]} rotation-x={-Math.PI / 2}>
+          <mesh>
+            <ringGeometry args={[0.26, 0.33, 32]} />
+            <meshBasicMaterial color={0xfff2b0} transparent opacity={0.3} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
       {plant && (
         <group ref={scaleGroupRef}>
           <primitive object={plant} />
@@ -159,6 +194,7 @@ function PlotView({ index, crop, plantedAt, onPlot, make }: PlotViewProps) {
 }
 
 function Farm({ data, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
+  const afford = data.coins >= CROPS[data.selected].seedPrice
   return (
     <>
       {data.plots.map((p, i) => (
@@ -167,6 +203,7 @@ function Farm({ data, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
           index={i}
           crop={p.crop}
           plantedAt={p.plantedAt}
+          hint={!p.crop && afford}
           onPlot={onPlot}
           make={make}
         />
@@ -177,7 +214,7 @@ function Farm({ data, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
 
 // —— D4 特效层 ——
 
-/** 收获弹出：作物起跳 + 先胀后缩 + 自旋，600ms 后移除 */
+/** 收获弹出：作物起跳 + 先胀后缩 + 自旋（DUR.slow） */
 function PopLayer() {
   const groupRef = useRef<Group>(null)
 
@@ -186,7 +223,7 @@ function PopLayer() {
     if (!g) return
     const now = performance.now()
     for (const p of [...getPops()]) {
-      const t = (now - p.born) / 600
+      const t = (now - p.born) / DUR.slow
       if (t >= 1) {
         g.remove(p.obj)
         removePop(p)
@@ -196,7 +233,7 @@ function PopLayer() {
         p.obj.position.set(p.x, 0, p.z)
         g.add(p.obj)
       }
-      const k = 1 - Math.pow(1 - t, 2)
+      const k = ease.outQuad(t)
       p.obj.position.y = 0.55 * k
       const s = t < 0.3 ? 1 + 0.5 * (t / 0.3) : 1.5 - 0.9 * ((t - 0.3) / 0.7)
       p.obj.scale.setScalar(Math.max(0.001, s))
@@ -207,22 +244,27 @@ function PopLayer() {
   return <group ref={groupRef} />
 }
 
-/** 金币粒子：固定 64 实例的 InstancedMesh 池，闲置实例缩放归零 */
+/** 金币粒子：固定 64 实例的 InstancedMesh 池，闲置实例缩放归零；存活 slow+fast，尾部 fast 档收缩 */
+const COIN_TTL = DUR.slow + DUR.fast + 50
+const COIN_FADE = DUR.base
+
 function CoinParticles() {
   const ref = useRef<InstancedMesh>(null)
   const dummy = useMemo(() => new Object3D(), [])
 
   useFrame((_, dt) => {
-    updateCoins(Math.min(dt, 0.05))
+    updateCoins(Math.min(dt, 0.05), COIN_TTL)
     const mesh = ref.current
     if (!mesh) return
     const list = getCoins()
+    const now = performance.now()
     for (let i = 0; i < MAX_COINS; i++) {
       const c = list[i]
       if (c) {
         dummy.position.copy(c.pos)
         dummy.rotation.set(c.tilt, c.rot, 0)
-        dummy.scale.setScalar(1)
+        const age = now - c.born
+        dummy.scale.setScalar(age > COIN_TTL - COIN_FADE ? Math.max(0, (COIN_TTL - age) / COIN_FADE) : 1)
       } else {
         dummy.scale.setScalar(0)
       }

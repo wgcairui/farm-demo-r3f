@@ -60,7 +60,7 @@ export function spawnCoinBurst(x: number, y: number, z: number, count = 10) {
   if (coins.length > MAX_COINS) coins.splice(0, coins.length - MAX_COINS)
 }
 
-export function updateCoins(dt: number) {
+export function updateCoins(dt: number, ttl: number) {
   const now = performance.now()
   for (let i = coins.length - 1; i >= 0; i--) {
     const c = coins[i]
@@ -74,7 +74,7 @@ export function updateCoins(dt: number) {
       c.vel.x *= 0.7
       c.vel.z *= 0.7
     }
-    if (now - c.born > 800) coins.splice(i, 1)
+    if (now - c.born > ttl) coins.splice(i, 1)
   }
 }
 

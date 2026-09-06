@@ -67,6 +67,16 @@ body {
   color: #7a5800;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   pointer-events: none;
+  animation: coinPop 150ms ease-out;
+}
+
+@keyframes coinPop {
+  from {
+    transform: scale(1.18);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 .seedbar {
@@ -138,6 +148,7 @@ body {
   font-weight: 800;
   color: #ffdd57;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  /* 900ms = motion.DUR.linger（时长规范收口在 farm3d/motion.ts） */
   animation: rise 0.9s ease-out forwards;
 }
 
