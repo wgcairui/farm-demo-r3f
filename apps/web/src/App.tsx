@@ -6,7 +6,7 @@ import FarmScene from './farm3d/FarmScene'
 import { useFarm } from './farm3d/useFarm'
 
 export default function App() {
-  const { data, now, handlePlot, select, reset } = useFarm()
+  const { data, handlePlot, select, reset } = useFarm()
 
   return (
     <div className="app">
@@ -17,12 +17,12 @@ export default function App() {
         camera={{ position: [4.6, 3.6, 5.8], fov: 42, near: 0.1, far: 100 }}
         onPointerDown={trackPointerDown}
       >
-        <FarmScene data={data} now={now} onPlot={handlePlot} />
+        <FarmScene data={data} onPlot={handlePlot} />
       </Canvas>
 
       <header className="hud">
         <span className="hud-title">🧑‍🌾 小满农场</span>
-        <span className="hud-badge">Phase 1 · D2 核心循环</span>
+        <span className="hud-badge">Phase 1 · D4 juice</span>
       </header>
       <div className="coins">🪙 {data.coins}</div>
 
@@ -46,6 +46,8 @@ export default function App() {
           ↺
         </button>
       </div>
+
+      <div id="float-root" />
     </div>
   )
 }

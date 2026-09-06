@@ -1,16 +1,25 @@
 import { memo, Suspense, useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import type { Group } from 'three'
+import type { Group, InstancedMesh } from 'three'
+import { Object3D, Vector3 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { progressOf, stageOf, type CropId, type SaveData, type Stage } from '@farm/game'
+import { CROPS, type CropId, type SaveData } from '@farm/game'
 import { ASSETS } from './assets'
 import { isClick } from './clickGuard'
+import {
+  getPops,
+  getCoins,
+  MAX_COINS,
+  removePop,
+  spawnHarvestPop,
+  updateCoins,
+} from './effects'
+import { mountFloaterDom, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
 
 export interface FarmSceneProps {
   data: SaveData
-  now: number
   onPlot: (i: number) => void
 }
 
@@ -84,18 +93,50 @@ interface MakeMap {
 interface PlotViewProps {
   index: number
   crop: CropId | null
-  stage: Stage
-  progress: number
+  plantedAt: number | null
   onPlot: (i: number) => void
   make: MakeMap
 }
 
-function PlotView({ index, crop, stage, progress, onPlot, make }: PlotViewProps) {
+function PlotView({ index, crop, plantedAt, onPlot, make }: PlotViewProps) {
   const [x, z] = plotPosition(index)
   const dirt = useMemo(() => make.dirt(), [make])
   const plant = useMemo(() => (crop ? make[crop]() : null), [crop, make])
-  // D3 生长连续插值：总进度 easeOutCubic 映射到 scale；刚种下就有一株可见小苗
-  const scale = 0.08 + 0.92 * (1 - Math.pow(1 - progress, 3))
+
+  const scaleGroupRef = useRef<Group>(null)
+  const squashAtRef = useRef<number | null>(null)
+  const stateRef = useRef<{ crop: CropId | null; plant: Group | null }>({ crop, plant })
+
+  // 播种/收获的边界检测：播种 → 压弹；收获 → 把旧模型交给 PopLayer 起跳消失
+  useEffect(() => {
+    const prev = stateRef.current
+    if (prev.crop && !crop && prev.plant) spawnHarvestPop(prev.plant, x, z)
+    if (!prev.crop && crop) squashAtRef.current = performance.now()
+    stateRef.current = { crop, plant }
+  }, [crop, plant, x])
+
+  useFrame(() => {
+    const g = scaleGroupRef.current
+    if (!g) return
+
+    // 生长连续插值：Date.now 对齐 plantedAt 的时间基（帧级平滑，不等 500ms 心跳）
+    let base = 0.08
+    if (crop && plantedAt) {
+      const def = CROPS[crop]
+      const t = Math.min(1, Math.max(0, (Date.now() - plantedAt) / (def.stageMs[0] + def.stageMs[1])))
+      base = 0.08 + 0.92 * (1 - Math.pow(1 - t, 3))
+    }
+
+    // 播种压弹：300ms 内先压到 ~0.55× 再弹回
+    let squash = 1
+    if (squashAtRef.current !== null) {
+      const t = (performance.now() - squashAtRef.current) / 300
+      if (t >= 1) squashAtRef.current = null
+      else squash = 1 - 0.45 * Math.sin(t * Math.PI)
+    }
+
+    g.scale.setScalar(base * squash)
+  })
 
   return (
     <group
@@ -108,8 +149,8 @@ function PlotView({ index, crop, stage, progress, onPlot, make }: PlotViewProps)
       onPointerOut={() => (document.body.style.cursor = 'auto')}
     >
       <primitive object={dirt} />
-      {plant && stage !== 'empty' && (
-        <group scale={scale}>
+      {plant && (
+        <group ref={scaleGroupRef}>
           <primitive object={plant} />
         </group>
       )}
@@ -117,7 +158,7 @@ function PlotView({ index, crop, stage, progress, onPlot, make }: PlotViewProps)
   )
 }
 
-function Farm({ data, now, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
+function Farm({ data, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
   return (
     <>
       {data.plots.map((p, i) => (
@@ -125,8 +166,7 @@ function Farm({ data, now, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
           key={i}
           index={i}
           crop={p.crop}
-          stage={stageOf(p, now)}
-          progress={progressOf(p, now)}
+          plantedAt={p.plantedAt}
           onPlot={onPlot}
           make={make}
         />
@@ -135,8 +175,95 @@ function Farm({ data, now, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
   )
 }
 
-// 静态子树：实例只建一次（useMemo），组件 memo 掉心跳带来的无谓重渲染——
-// 围栏 18 段若每 tick 克隆重挂，2 次/秒的场景图抖动是 review 揪出来的 P0。
+// —— D4 特效层 ——
+
+/** 收获弹出：作物起跳 + 先胀后缩 + 自旋，600ms 后移除 */
+function PopLayer() {
+  const groupRef = useRef<Group>(null)
+
+  useFrame(() => {
+    const g = groupRef.current
+    if (!g) return
+    const now = performance.now()
+    for (const p of [...getPops()]) {
+      const t = (now - p.born) / 600
+      if (t >= 1) {
+        g.remove(p.obj)
+        removePop(p)
+        continue
+      }
+      if (!p.obj.parent) {
+        p.obj.position.set(p.x, 0, p.z)
+        g.add(p.obj)
+      }
+      const k = 1 - Math.pow(1 - t, 2)
+      p.obj.position.y = 0.55 * k
+      const s = t < 0.3 ? 1 + 0.5 * (t / 0.3) : 1.5 - 0.9 * ((t - 0.3) / 0.7)
+      p.obj.scale.setScalar(Math.max(0.001, s))
+      p.obj.rotation.y += 0.06
+    }
+  })
+
+  return <group ref={groupRef} />
+}
+
+/** 金币粒子：固定 64 实例的 InstancedMesh 池，闲置实例缩放归零 */
+function CoinParticles() {
+  const ref = useRef<InstancedMesh>(null)
+  const dummy = useMemo(() => new Object3D(), [])
+
+  useFrame((_, dt) => {
+    updateCoins(Math.min(dt, 0.05))
+    const mesh = ref.current
+    if (!mesh) return
+    const list = getCoins()
+    for (let i = 0; i < MAX_COINS; i++) {
+      const c = list[i]
+      if (c) {
+        dummy.position.copy(c.pos)
+        dummy.rotation.set(c.tilt, c.rot, 0)
+        dummy.scale.setScalar(1)
+      } else {
+        dummy.scale.setScalar(0)
+      }
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  })
+
+  return (
+    <instancedMesh ref={ref} args={[undefined!, undefined!, MAX_COINS]} frustumCulled={false}>
+      <cylinderGeometry args={[0.055, 0.055, 0.018, 14]} />
+      <meshLambertMaterial color={0xffd24a} emissive={0x7a5200} />
+    </instancedMesh>
+  )
+}
+
+/** 浮动文字桥：3D 锚点投影到屏幕坐标，交给 DOM 层呈现 */
+function FloaterBridge() {
+  const camera = useThree((s) => s.camera)
+  const size = useThree((s) => s.size)
+  const v = useMemo(() => new Vector3(), [])
+
+  useFrame(() => {
+    for (const f of takeFloaters()) {
+      v.set(f.x, f.y, f.z).project(camera)
+      if (v.z < 1) {
+        mountFloaterDom(
+          (v.x * 0.5 + 0.5) * size.width,
+          (-v.y * 0.5 + 0.5) * size.height,
+          f.text,
+        )
+      }
+    }
+  })
+
+  return null
+}
+
+// —— 静态环境（memo + 实例只建一次）——
+
 const FenceRing = memo(function FenceRing() {
   const fenceGltf = useGLTF(ASSETS.fence)
 
@@ -200,7 +327,7 @@ const Trees = memo(function Trees() {
   )
 })
 
-export default function FarmScene({ data, now, onPlot }: FarmSceneProps) {
+export default function FarmScene({ data, onPlot }: FarmSceneProps) {
   const dirtGltf = useGLTF(ASSETS.dirt)
   const carrotGltf = useGLTF(ASSETS.carrot)
   const cornGltf = useGLTF(ASSETS.corn)
@@ -222,9 +349,12 @@ export default function FarmScene({ data, now, onPlot }: FarmSceneProps) {
       <Lights />
       <Suspense fallback={null}>
         <Ground />
-        <Farm data={data} now={now} onPlot={onPlot} make={make} />
+        <Farm data={data} onPlot={onPlot} make={make} />
         <FenceRing />
         <Trees />
+        <PopLayer />
+        <CoinParticles />
+        <FloaterBridge />
       </Suspense>
     </>
   )
