@@ -6,7 +6,7 @@
 #   docker buildx build --no-cache -f apps/web/Dockerfile -t farm-demo-web:latest .
 
 # ---- builder stage ----
-FROM oven/bun:1-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -16,18 +16,17 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/game/package.json ./packages/game/
 COPY packages/assets/package.json ./packages/assets/
 
-# bun install 走 workspaces，比 npm ci 稳（lock file 由 npm 生成但 bun 也吃）
-# 失败 fallback 到 npm ci
-RUN bun install --frozen-lockfile --ignore-scripts 2>&1 | tail -10 \
- || npm ci --no-audit --no-fund --ignore-scripts 2>&1 | tail -10
+# npm ci 装 workspaces（web ^7.0.2 / mobile ~6.0.3 双 TS 故意不动，这里只跑 web build）
+RUN npm ci --no-audit --no-fund --ignore-scripts 2>&1 | tail -5
 
 # 业务源码：apps/web（含 vite 配置 + src） + packages（game 包 + assets 含 GLB）
 COPY packages/ ./packages/
 COPY apps/web/ ./apps/web/
 
 # build：tsc 类型检查 + vite build（产出 dist/）
-# 若双端 TS 版本差异导致 tsc 失败，可改成直接 `npx vite build` 跳过类型检查
-RUN npm run build -w @farm/web 2>&1 | tail -20
+# 在 apps/web 子目录跑，让 npm 优先解析 apps/web/node_modules/.bin/tsc（^7.0.2），
+# 避免被 root node_modules 的 tsc（6.0.3，来自 expo SDK 锁定）覆盖导致 implicit-any 误报
+RUN cd /app/apps/web && npm run build 2>&1 | tail -20
 
 # ---- runtime stage ----
 FROM nginx:alpine
