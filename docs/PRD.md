@@ -134,7 +134,7 @@ farm-demo/
 
 日历：2026-09-06 启动，2026-09-30 主体完成，10-01~10-05 buffer。
 
-### Phase 0：准备与骨架（0.5 天，9/6）
+### Phase 0：准备与骨架（0.5 天，9/6）✅ 完成（2026-09-06 复验通过 + 源码审计清零）
 
 工作步骤：
 1. 收集并选定 CC0 低模资产包（Kenney Farm / Quaternius），确认含：耕地、胡萝卜/玉米各 3 生长阶段（或可缩放的成熟模型 + 通用幼苗）、围栏地面装饰；记录资产来源与授权。
@@ -143,12 +143,12 @@ farm-demo/
 4. 新建 `apps/mobile/` Expo 空壳，跑通 expo-gl 的 hello triangle（提前暴露环境问题）。
 
 验收标准：
-- [ ] `npm run dev`（web）与 `expo start`（mobile）双端均可启动
-- [ ] mobile 端 expo-gl 渲染出一个三角/立方体（证明 GL 上下文可用）
-- [ ] game 包被双端 import 成功（控制台打印一次 `stageOf` 单测结果即可）
-- [ ] 版本锁定表提交进 README
+- [x] `npm run dev`（web）与 `expo start`（mobile）双端均可启动（2026-09-06 双端重启实测，Metro Bundled 716 modules）
+- [x] mobile 端 expo-gl 渲染出一个三角/立方体（证明 GL 上下文可用）（模拟器截图：Lambert 立方体 ~20fps 半分辨率档）
+- [x] game 包被双端 import 成功（控制台打印一次 `stageOf` 单测结果即可）（web=vite transform 实链路；mobile=`[smoke]` 日志）
+- [x] 版本锁定表提交进 README（2026-09-06 逐行核对 node_modules，复验时补装 gesture-handler@2.32.0）
 
-### Phase 1：Web 原型——手感定稿（9/7 ~ 9/12，6 天）
+### Phase 1：Web 原型——手感定稿（9/7 ~ 9/12，6 天）→ D1~D5 已完成（2026-09-06，超前），D6 冻结中
 
 工作步骤：
 1. **D1 场景静态搭建**：地块、地面、光照、阴影、天空色，固定机位；低模资产入场景。
@@ -159,14 +159,16 @@ farm-demo/
 6. **D6 冻结**：录屏对比，自己试玩 10 分钟找别扭点修完；**此后场景与手感设计冻结，Phase 2 只做移植不再改设计**。
 
 验收标准：
-- [ ] 完整循环可玩：选种→播种→（缩短时间参数）等待→收获→金币正确增减，全程无需刷新
-- [ ] 刷新页面存档恢复正确；改本地时钟回拨不导致阶段倒退
-- [ ] 每次点击交互有 ≤100ms 的视觉反馈（动画启动）
-- [ ] 收获时刻同时满足：作物动画 + 粒子 + 浮动文字 + 音效，无一遗漏
-- [ ] Chrome Performance 面板：持续交互场景下无 >50ms 长任务（web 参考线）
-- [ ] tsc --noEmit 通过；`packages/game` 相对原版 diff 为零（仅移动位置）
+- [x] 完整循环可玩：选种→播种→（缩短时间参数）等待→收获→金币正确增减，全程无需刷新（双作物端到端：胡萝卜 10→25、玉米 20→55，账目全对）
+- [x] 刷新页面存档恢复正确；改本地时钟回拨不导致阶段倒退（存档刷新恢复实测；回拨用 node 直载 game 包真源码验证：plantedAt 置于未来 → sprout / progress 0）
+- [x] 每次点击交互有 ≤100ms 的视觉反馈（动画启动）（播种压弹/收获弹出由 useFrame 帧级驱动，点击即启动，音效同点触发）
+- [x] 收获时刻同时满足：作物动画 + 粒子 + 浮动文字 + 音效，无一遗漏（截图捕获粒子+浮字+弹出；音效与特效同一触发点，headless 无法听音但无 AudioContext 异常）
+- [ ] Chrome Performance 面板：持续交互场景下无 >50ms 长任务（web 参考线）（D6 待办）
+- [x] tsc --noEmit 通过；`packages/game` 相对原版 diff 为零（仅移动位置）（`git show 60b350f:src/game.ts` 逐字节一致）
 
 ### Phase 2：RN 移植（9/13 ~ 9/20，8 天）
+
+> 备注（Phase 0 复验后）：D1 的"Canvas（fiber native）"需先冒烟验证 R3F 的 rAF 循环与 EXGL 无背压命令队列的兼容性；若冲突则降级为 three 直写 expo-gl（Phase 0 已验证 getError 背压屏障 + 自调度 setTimeout 方案），场景代码平台无关、两种路线都可直接平移。
 
 工作步骤：
 1. **D1 壳搭建**：Expo dev build 装真机；Canvas（fiber native）+ 场景代码平移，先跑通静态场景渲染。

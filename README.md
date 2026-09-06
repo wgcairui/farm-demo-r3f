@@ -1,6 +1,6 @@
 # farm-demo
 
-「开心农场」3D 重制：**RN + Three.js** 面试作品项目。2D 原型（Vite + React 19）已迁入 `apps/web`，游戏逻辑抽为共享包 `packages/game`；Phase 1 在 web 端用 react-three-fiber 做 3D 原型，Phase 2 移植到 `apps/mobile`（Expo + expo-gl）。
+「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线逐字节零 diff）。当前进度：**Phase 0（双端骨架）已完成并复验，Phase 1 web 3D 原型 D1~D5 已完成（D6 冻结中）**；Phase 2 移植到 `apps/mobile`（Expo + expo-gl）。进度总览见下方「进度」，验收勾选见 [docs/PRD.md](docs/PRD.md)。
 
 详细计划见 [docs/PRD.md](docs/PRD.md)，资产清单与授权见 [packages/assets/ASSETS.md](packages/assets/ASSETS.md)。
 
@@ -8,12 +8,25 @@
 
 ```
 farm-demo/
-├── apps/web/        # Web 版（Vite + React 19）— Phase 1 改造为 R3F 3D 原型
-├── apps/mobile/     # RN 版（Expo SDK 57 + expo-gl）— Phase 2 移植目标
-├── packages/game/   # 游戏数值与状态机（纯 TS，双端共享，服务端同构）
-├── packages/assets/ # CC0 3D 模型（glTF）+ 授权记录
-└── docs/            # PRD
+├── apps/web/        # Web 3D 原型（Vite + React 19 + R3F）— Phase 1 D1~D5 完成
+│   └── src/farm3d/  # gltf 资产管线 / motion 动画规范 / effects 特效 / sfx 合成音效
+│                    # clickGuard 点击阈值 / layout 地块布局 / useFarm 状态壳 / FarmScene 场景
+├── apps/mobile/     # RN 版（Expo SDK 57 + expo-gl）— Phase 0 hello-cube 跑通（模拟器 ~20fps），Phase 2 移植目标
+├── packages/game/   # 游戏数值与状态机（纯 TS，双端共享，服务端同构；对基线零 diff）
+├── packages/assets/ # CC0 3D 模型（glTF，poly.pizza/Quaternius）+ 授权记录
+├── scripts/         # patch-ios27-scene.sh（expo prebuild 后必跑）
+└── docs/            # PRD（含验收清单勾选进度）
 ```
+
+## 进度（2026-09-06）
+
+| 阶段 | 状态 | 说明 |
+|---|---|---|
+| Phase 0 准备与骨架 | ✅ 完成（当日复验 4/4 + 源码审计清零） | workspaces / game 包零 diff / expo-gl×three 跑通 / 版本表 / gesture-handler 锁定 |
+| Phase 1 Web 原型 D1~D5 | ✅ 完成 | R3F 场景 + 核心循环 + 环绕相机 + 生长插值 + juice 四件套 + motion 动画规范（提交 61e0758 → 0cd6398） |
+| Phase 1 D6 冻结 | ⏳ 进行中 | 待：试玩 10 分钟修别扭点、录屏、Chrome Perf 长任务数据 |
+| Phase 2 RN 移植（9/13~） | ⬜ 未开始 | 渲染层 D1 冒烟后定：fiber native vs three 直写（倾向后者，背压循环已验证） |
+| Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
 
 ## 快速开始
 
