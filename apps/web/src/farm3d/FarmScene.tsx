@@ -788,12 +788,14 @@ const FenceRing = memo(function FenceRing() {
 })
 
 // trees.glb 是 5 棵树的合集，按节点名拆选单棵使用（ASSETS.md 有注）
+// D12 audit fix：NormalTree_1 @ (-0.3, -3.6) 与搬过来的仓库 (-1.5, -2.5) 距离仅 1.3m
+// 会穿模；挪到 (1.0, -3.6) 镜像到 +x 后方空地。
 const TREES = [
   { name: 'NormalTree_1', height: 1.7, pos: [-3.4, -2.7], rotY: 0.3 },
   { name: 'NormalTree_3', height: 2.2, pos: [3.6, -3.0], rotY: -1.2 },
   { name: 'NormalTree_2', height: 1.9, pos: [4.4, 0.2], rotY: 2.1 },
   { name: 'NormalTree_4', height: 1.5, pos: [-4.3, 1.4], rotY: 1.1 },
-  { name: 'NormalTree_1', height: 1.3, pos: [-0.3, -3.6], rotY: 0.9 },
+  { name: 'NormalTree_1', height: 1.3, pos: [1.0, -3.6], rotY: 0.9 },
 ] as const
 
 const Trees = memo(function Trees() {
