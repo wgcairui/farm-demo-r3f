@@ -48,67 +48,7 @@ farm-demo/
 - 附加状态（偏移/施肥/减产/浇水）存独立 localStorage 键 `farm-demo-extras-v1`，主存档仍归 game 包管。已知限制：多标签页同开时附加层 last-writer-wins（主存档同样如此，demo 范围不处理）。
 - 演示/测试钩子：`__farmEvent('rain'|'drought'|'pest')` 强制触发事件（面试现场演示可控），`__farmDebug()` 读内部状态。
 
-## 部署
-
-支持两套独立部署链路：**自建 cc + Docker**（prod URL `https://game.ladishb.com/`）和 **Vercel**（CI/CD 一行 push）。两套互相独立、不互斥，可同时跑。
-
-### A. 自建 cc + Docker（生产在跑）
-
-适用：自建小服务器、有 cc 主机、需要自定义域名。流程：
-
-```bash
-# 本地：构建 amd64 镜像（Mac 默认 arm64，cc 是 amd64，平台错位会 exec format error）
-docker buildx build --no-cache --platform linux/amd64 \
-  -f apps/web/Dockerfile -t farm-demo-web:latest --load .
-
-# 导出 + 推送到 cc
-docker save farm-demo-web:latest | gzip > /tmp/farm-demo-web.tar.gz
-scp /tmp/farm-demo-web.tar.gz cc:/tmp/
-
-# cc：加载 + 重启容器
-ssh cc 'docker load -i /tmp/farm-demo-web.tar.gz && \
-  cd ~/Web/docker && docker compose up -d farm-web'
-```
-
-`~/Web/docker/docker-compose.yml` 已有 `farm-web` 服务（端口 172.18.0.1:9063→80），nginx vhost 反代 `game.ladishb.com` 到此端口。
-
-**踩坑（必读）**：
-1. **平台错位**：Mac M1 默认 `docker build` 出 arm64，cc 是 amd64 → 容器 `exec format error`。强制 `--platform linux/amd64`。
-2. **Dockerfile 漏 COPY mobile**：原 Dockerfile 只 COPY `apps/web/package.json`，npm ci 漏装 `@react-three/fiber` / `three` / `@types/three`，tsc 7 strict 报 `Cannot find module 'three'` + `Property 'mesh' does not exist on JSX.IntrinsicElements`。修复：补 `COPY apps/mobile/package.json ./apps/mobile/`（mobile 包声明了这些依赖）。
-3. **tsc 7.0.2 strict-only 错误**：本地 tsc 6.0.3 不报、docker 里 tsc 7 会报：`Promise<GLTF> | undefined` narrow、`traverse(o)` 隐式 any。Dockerfile `cd apps/web && npm run build` 让 tsc 用 apps/web 局部 7.0.2；剩余 4 个错误在 `apps/web/src/farm3d/gltf.ts` 显式标注类型。
-4. **`tsc` 失败但 dist 仍存在**：buildkit 把 `npm run build` 的 stderr/stdout 一起 tail，tsc exit code 1 被 `&&` 后的 `vite build` 覆盖前 dist 已被缓存——曾导致 prod 跑旧版。**判断 deploy 成功必须看 container status healthy + 浏览器加载新 bundle**，不能只看 build log。
-
-### B. Vercel（一行 push 自动部署）
-
-适用：演示/分享/免维护。流程：
-
-```bash
-# 1. 登录（首次）
-vercel login
-
-# 2. 首次部署（创建 project + 部署到 preview）
-vercel
-
-# 3. 部署到 prod
-vercel --prod
-```
-
-`vercel.json` 已配置：
-
-- `buildCommand`: `cd apps/web && npm run build`（让 tsc 用 web 局部 ^7.0.2）
-- `outputDirectory`: `apps/web/dist`
-- `installCommand`: `npm install --workspaces --include-workspace-root`（workspaces 单副本）
-- `rewrites`: SPA fallback → `/index.html`
-- `headers`: `/assets/*` 长缓存 + `/index.html` 不缓存（同 nginx.conf）
-
-Vercel 自动：CDN 全球边缘、自动 HTTPS、自定义域支持（dashboard 加 `game.ladishb.com`）、GitHub push 触发 CI/CD。
-
-**cc vs Vercel 取舍**：
-- **cc**：自建可控、复用现有 nginx + 域名、不依赖第三方；但要维护 Docker + 镜像同步链路
-- **Vercel**：零运维、CI/CD 一行；但免费档有 100GB 带宽/月限制，超出按量计费
-- **当前**：cc 是 prod 主站，Vercel 可作 preview 备用 / 面试现场分享链接
-
-### D6 试玩反馈第一轮（2026-09-06）
+## D6 试玩反馈第一轮（2026-09-06）
 
 试玩反馈「没进度条 / 作物没差异 / 缺惊喜」→ 当轮落地：
 
@@ -123,6 +63,104 @@ Vercel 自动：CDN 全球边缘、自动 HTTPS、自定义域支持（dashboard
 - **墙钟补结算**：事件累加按帧间真实间隔（rAF 后台暂停，回前台一帧一次性补齐，且只补到事件 endAt）——切后台躲不掉干旱、也不白丢雨加成，与生长的 Date.now() 墙钟哲学一致。
 - 附加状态（偏移/施肥/减产/浇水）存独立 localStorage 键 `farm-demo-extras-v1`，主存档仍归 game 包管。已知限制：多标签页同开时附加层 last-writer-wins（主存档同样如此，demo 范围不处理）。
 - 演示/测试钩子：`__farmEvent('rain'|'drought'|'pest')` 强制触发事件（面试现场演示可控），`__farmDebug()` 读内部状态。
+
+## 部署
+
+支持两套独立部署链路，**两套 prod 站点当前都跑着同一份代码（HTML MD5 + JS bundle 字节完全一致）**：
+
+| 链路 | URL | 状态 | 适用 |
+|---|---|---|---|
+| cc + Docker（主站） | https://game.ladishb.com/ | ✅ healthy | 自建小服务器 + 自定义域名 |
+| Vercel（CDN 备用） | https://farm-demo-gamma.vercel.app | ✅ Ready | 演示/分享/免维护 |
+
+### A. 自建 cc + Docker（生产在跑）
+
+`~/Web/docker/docker-compose.yml` 已有 `farm-web` 服务（端口 `172.18.0.1:9063:80`），nginx vhost 反代 `game.ladishb.com` 到此端口。
+
+```bash
+# 本地：构建 amd64 镜像（Mac 默认 arm64，cc 是 amd64，平台错位会 exec format error）
+docker buildx build --no-cache --platform linux/amd64 \
+  -f apps/web/Dockerfile -t farm-demo-web:latest --load .
+
+# 导出 + 推送到 cc
+docker save farm-demo-web:latest | gzip > /tmp/farm-demo-web.tar.gz
+scp /tmp/farm-demo-web.tar.gz cc:/tmp/
+
+# cc：加载 + 重启容器
+ssh cc 'docker load -i /tmp/farm-demo-web.tar.gz && \
+  cd ~/Web/docker && docker compose up -d farm-web'
+
+# 验证
+curl -sI https://game.ladishb.com/ | head -3   # HTTP/2 200
+```
+
+**踩坑（必读）**：
+1. **平台错位**：Mac M1 默认 `docker build` 出 arm64，cc 是 amd64 → 容器 `exec format error`。强制 `--platform linux/amd64`。
+2. **Dockerfile 漏 COPY mobile**：原 Dockerfile 只 COPY `apps/web/package.json`，npm ci 漏装 `@react-three/fiber` / `three` / `@types/three`，tsc 7 strict 报 `Cannot find module 'three'` + `Property 'mesh' does not exist on JSX.IntrinsicElements`。修复：补 `COPY apps/mobile/package.json ./apps/mobile/`（mobile 包声明了这些依赖）。
+3. **tsc 7.0.2 strict-only 错误**：本地 tsc 6.0.3 不报、docker 里 tsc 7 会报：`Promise<GLTF> | undefined` narrow、`traverse(o)` 隐式 any。Dockerfile `cd apps/web && npm run build` 让 tsc 用 apps/web 局部 7.0.2；剩余 4 个错误在 `apps/web/src/farm3d/gltf.ts` 显式标注类型。
+4. **`tsc` 失败但 dist 仍存在**：buildkit 把 `npm run build` 的 stderr/stdout 一起 tail，tsc exit code 1 被 `&&` 后的 `vite build` 覆盖前 dist 已被缓存——曾导致 prod 跑旧版。**判断 deploy 成功必须看 container status healthy + 浏览器加载新 bundle**，不能只看 build log。
+
+### B. Vercel（CDN 备用，已跑通）
+
+```bash
+# 首次
+npm i -g vercel@latest        # CLI ≥ 50 即可，59.x 是当前最新
+vercel login                   # 浏览器 OAuth 授权
+vercel                         # 首次创建 project + 部署到 preview
+vercel --prod                  # 部署到 prod
+```
+
+`vercel.json` 已配置：
+
+- `buildCommand`: `cd apps/web && npm run build`（让 tsc 用 web 局部 ^7.0.2）
+- `outputDirectory`: `apps/web/dist`
+- `installCommand`: `npm install --workspaces --include-workspace-root`（workspaces 单副本）
+- `rewrites`: SPA fallback → `/index.html`
+- `headers`: `/assets/*` 长缓存 + `/index.html` 不缓存（同 nginx.conf）
+
+`.vercelignore` 已配（关键）：
+
+```
+node_modules
+**/node_modules
+.git
+.playwright-cli
+.zcode
+.expo
+apps/mobile/ios
+apps/mobile/android
+apps/web/ios
+apps/web/dist
+```
+
+**Vercel 踩坑**：
+1. **15000 文件上传上限**：默认全仓库上传含 `node_modules`（expo 等 transitive 依赖动辄 2 万+ 文件），报 `Invalid request: files should NOT have more than 15000 items, received 20503`。`.vercelignore` 排除 node_modules + apps/mobile 后从 20503 降到 **448** 个文件。
+2. **上传不需要 node_modules**：Vercel 云端自己 `npm install`，只传源码 + lockfile + vercel.json 即可。云端 install 16s 装 557 包 + tsc + vite build 30s 出 dist。
+3. **preview deployment 密码保护**：`farm-demo-<hash>-cairuis-projects.vercel.app` 这种带 hash 的原始 URL 默认开启 Vercel SSO 302 重定向（避免 preview abuse）。**production 别名**（项目级 `farm-demo-gamma.vercel.app`）才是公开 URL，分享链接用别名。
+4. **CLI 升级陷阱**：旧 CLI（`/Users/cairui/.bun/bin/vercel` 50.18.2）PATH 优先级可能高于 npm 全局新版。升级后 `which vercel` 仍指向旧版 → 删 bun 旧符号链接 `rm /Users/cairui/.bun/bin/vercel` 让 `/opt/homebrew/bin/vercel`（npm 全局）接管。
+
+**cc vs Vercel 取舍**：
+- **cc**：自建可控、复用现有 nginx + 域名、不依赖第三方；但要维护 Docker + 镜像同步链路
+- **Vercel**：零运维、CI/CD 一行；但免费档有 100GB 带宽/月限制，超出按量计费
+- **当前**：cc 是 prod 主站（自定义域名），Vercel 可作面试现场分享链接 / 临时 demo / 多 region CDN 兜底
+
+### C. 字节级一致性验证（2026-09-06 实测）
+
+D10 commit `8b21752` push 后两套 prod 同步跑：
+
+```bash
+# Vercel (alias)
+curl -s https://farm-demo-gamma.vercel.app/ | md5
+# → 0586753a396a6787e53a377c8cb25756
+
+# cc (custom domain)
+curl -s https://game.ladishb.com/ | md5
+# → 0586753a396a6787e53a377c8cb25756    ← 完全相同
+
+# JS bundle 两站都是 index-BGlLWr4T.js 1170543 bytes
+```
+
+**意义**：相同源码 → 相同 dist → 字节级一致的 HTML 产物。任何一站修 bug 重新部署后跑一次这个对比就能确认两站是否同步。
 
 ## 快速开始
 

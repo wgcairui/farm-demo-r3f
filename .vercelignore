@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+.git
+.playwright-cli
+.zcode
+.expo
+apps/mobile/ios
+apps/mobile/android
+apps/mobile/.expo
+apps/web/ios
+apps/web/dist
+apps/web/.playwright-cli
+**/*.log
+**/.DS_Store
