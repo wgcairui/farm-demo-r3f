@@ -82,10 +82,11 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 ### 待办（Phase 2 移植前）
 
 - `packages/game` 的 `load/save` 直连 `localStorage`，RN 无此全局——移植时把存储后端做成参数注入（web=localStorage，RN=AsyncStorage 封装）。
+- `FarmScene.tsx` PlotView 的 hover 光标直连 `document.body.style.cursor`——RN 无 document，Phase 2 手势重写（gesture-handler）时消除，勿照搬。
 
 ## Phase 1 web 侧踩坑（R3F 原型）
 
-- **poly.pizza/Quaternius 的 GLB 把 `metallicFactor` 统一导出为 0.4**，但场景无环境贴图 → 金属度按 PBR 公式吸走漫反射，模型整体发黑。低模卡通风应在加载时统一 `metalness=0`（见 `apps/web/src/farm3d/gltf.ts` 的归一化管线）。
+- **poly.pizza/Quaternius 的 GLB 把 `metallicFactor` 统一导出为 0.4**，但场景无环境贴图 → 金属度按 PBR 公式吸走漫反射，模型整体发黑。低模卡通风应在加载时统一 `metalness=0`。**坑中坑：多 primitive 的 GLB（carrot 本体+缨、trees 树干+叶，均 2 primitives）经 GLTFLoader 装成材质数组**，对数组直接赋 `metalness` 是静默无效的 expando，必须 `Array.isArray` 展开处理。review 时才揪出：此前误判"色板偏暗"，实为修复未生效，被 `flat` 的提亮掩盖。
 - R3F 默认开 **ACES tone mapping**，暗色板会再被压暗一档；卡通风直接 `<Canvas flat>` 关掉。
 - poly.pizza 模型单位极不统一，入场前必须按目标尺寸归一化（重定标 + XZ 居中 + 底面贴地），且缩放要用 `multiplyScalar`（源节点可能自带缩放，`setScalar` 会丢比例）。
 - `trees.glb`（3.3MB）是 5 棵树合集，按节点名（`NormalTree_N`）拆选单体后再归一化；GLB 结构可直接解析 JSON chunk 查看（12 字节头 + 4 字节长度）。

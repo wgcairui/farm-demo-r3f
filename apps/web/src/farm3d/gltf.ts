@@ -2,7 +2,7 @@
 // poly.pizza 的模型单位极不统一（同一个包里 0.01 ~ 100 都有），
 // 入场前统一"归一化"：按目标高度/宽度重定标、XZ 居中、底面贴 y=0、开阴影。
 import { use } from 'react'
-import { Box3, Group, Mesh, Object3D, Vector3 } from 'three'
+import { Box3, Group, Mesh, MeshStandardMaterial, Object3D, Vector3 } from 'three'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 const loader = new GLTFLoader()
@@ -58,8 +58,10 @@ export function normalized(src: Object3D, opts: NormalizeOpts): Group {
       m.receiveShadow = true
       // Quaternius 导出的 GLB 把 metallicFactor 统一写成 0.4，但没有环境贴图时
       // 金属度会吸走漫反射亮度（画面发黑）。低模卡通风全部按非金属处理。
-      const mat = m.material as { metalness?: number; roughness?: number } | undefined
-      if (mat) {
+      // 坑：多 primitive 的 mesh（carrot 本体+缨、trees 树干+叶）material 是数组，
+      // 直接对数组赋 metalness 是静默无效的 expando，必须展开。
+      const mats = (Array.isArray(m.material) ? m.material : [m.material]) as MeshStandardMaterial[]
+      for (const mat of mats) {
         mat.metalness = 0
         mat.roughness = 0.9
       }
