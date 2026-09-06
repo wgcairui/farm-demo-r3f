@@ -26,7 +26,7 @@ function buildPath(): Group {
 
   for (const s of STONES) {
     const stone = new Mesh(geo, mat)
-    stone.position.set(s.dx, 0.02, s.dz)
+    stone.position.set(s.dx, 0.06, s.dz)
     stone.rotation.y = s.rotY
     stone.castShadow = true
     stone.receiveShadow = true

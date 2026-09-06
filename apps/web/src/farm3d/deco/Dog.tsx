@@ -123,7 +123,7 @@ export default function Dog() {
   })
 
   return (
-    <group position={DOG_POS} scale={0.7}>
+    <group position={DOG_POS} scale={0.7} rotation={[0, Math.PI, 0]}>
       <primitive object={dog} />
     </group>
   )

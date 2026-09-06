@@ -13,8 +13,8 @@ import {
 
 /** 狗屋位置：cottage 右侧前方，朝地块方向 */
 export const DOGHOUSE_POS: [number, number, number] = [-2.4, 0, 2.3]
-/** 狗位置：紧邻狗屋门口（朝外，远离 cottage 墙） */
-export const DOG_POS: [number, number, number] = [-2.4, 0, 2.8]
+/** 狗位置：狗屋门口外（z 朝地块方向，远离狗屋主体，避免嵌入墙壁） */
+export const DOG_POS: [number, number, number] = [-2.4, 0, 3.1]
 
 function buildDoghouse(): Group {
   const g = new Group()
