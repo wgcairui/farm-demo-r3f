@@ -5,6 +5,12 @@
 # 本脚本对 prebuild 产物打补丁（幂等，prebuild 后需重跑）：
 #   1. Info.plist 注入 UIApplicationSceneManifest → SceneDelegate
 #   2. AppDelegate.swift 去掉 window 生命周期启动，追加 SceneDelegate 桥接 RN
+#
+# ⚠️ SDK 升级维护提示：下方 heredoc 的 AppDelegate/SceneDelegate 重写基于 Expo SDK 57
+# prebuild 模板快照——写死了 Farm3DDemo 目录、模块名 "main"、.expo/.virtual-metro-entry，
+# 且 scene(willConnectTo:) 忽略 launchOptions（模板是转发转发的，冷启动深链会丢参数）。
+# 升级 Expo/RN 后必须：先 diff 新模板与本 heredoc 的差异再套用；若模板出现
+# configurationForConnecting 覆盖，Info.plist 的 scene manifest 将不再权威，需重新设计。
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")/.." && pwd)/apps/mobile/ios/Farm3DDemo"
 PLIST="$DIR/Info.plist"

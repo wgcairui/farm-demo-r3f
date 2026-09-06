@@ -33,20 +33,21 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 | expo（SDK 57） | ~57.0.20 | mobile 基座 |
 | react-native | 0.86.3 | Expo 57 模板锁定 |
 | react | 19.2.3 | 双端统一（web 端从 19.2.8 收敛，否则 npm 无法单副本 hoist，ERESOLVE 冲突） |
-| three | ~0.185.1 | **双端必须同版本**，npm workspaces hoist 到根，单副本 |
+| three | ^0.185.1 | **双端必须同版本**，npm workspaces hoist 到根，单副本 |
 | @react-three/fiber | ~9.7.0 | 同上 hoist 共享 |
 | expo-gl | ~57.0.2 | SDK 匹配版（`expo install` 选定） |
 | expo-asset | ~57.0.16 | SDK 匹配版 |
-| @types/three | ~0.185.0 | |
+| react-native-gesture-handler | ~2.32.0 | expo install 选定（Phase 2 D3 手势用；native 侧随 Phase 2 D1 重建进壳） |
+| @types/three | ^0.185.4 | |
 | typescript | web ^7.0.2 / mobile ~6.0.3 | 各 app 独立 |
 
-已知环境事实：`github.com` 当前可达（历史注释称不通，已过时）；release 大文件走 objects.githubusercontent.com 较慢。
+已知环境事实：`github.com` 当前可达（历史注释称不通，已过时）；release 大文件走 objects.githubusercontent.com 较慢。根 `package.json` 显式声明 expo/react/react-native（与 apps/mobile 同版本）：保证 npm hoist 后全仓单副本（web 的 react 已收敛到 19.2.3 同此），升级时根与 mobile 必须同步改，否则会出现双副本破坏单副本不变量。
 
 ## 架构决策（Phase 0）
 
 1. **两步走**：先 Web（R3F）定手感，再 RN（expo-gl）移植——three 场景代码平台无关，约 90% 可平移，平台差异集中在壳（手势/UI/资产/存储/音频）。
 2. **逻辑与渲染零耦合**：`packages/game` 为纯 TS 源码包（无构建产物），web/mobile 直接消费 TS 源；接后端时该包的"时间戳 + 懒计算"模式原样搬服务端。
-3. **expo-gl WebGL2 shim**：three r163+ 仅走 WebGL2 路径，RN 无 `WebGL2RenderingContext` 全局，App 入口补空类 shim（见 `apps/mobile/App.tsx`）。
+3. **WebGL1 拒载绕过**：three r163+ 仅走 WebGL2 路径，但 expo-gl 的 WebGL2 上下文因非规范原型继承对 `instanceof WebGLRenderingContext` 恰好为 true——App 入口把全局 `WebGLRenderingContext` 换成哑类使检查落空（见 `apps/mobile/App.tsx`）。
 4. **UI 一律 RN overlay**，不依赖 drei 的 DOM 系组件；相机控制 Phase 2 用 gesture-handler 自写。
 
 ## expo-gl × three 踩坑实录（Phase 0，iOS 模拟器 + dev build）
@@ -59,12 +60,13 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 - **Xcode 27 移除 Simulator.app**：`expo run:ios` 起/osascript 阶段失败；用 `xcrun simctl install/launch` 手动装启绕过。
 - **Expo Go 不可用**：iOS 27 模拟器上 idb HID 点击失效（系统弹窗无法关），放弃 Expo Go，全部走 dev build。
 
-### JS 层（apps/mobile/App.tsx）
+### JS 层（apps/mobile/App.tsx）——已按 expo-gl 57.0.2 源码校准
 
-- **gl 实例是 JSI HostObject**：`in`/`hasOwnProperty` 恒 true，不能当存在性判断；必须 `typeof` 真读且 try/catch（读未知属性可能抛异常）。
-- **GL 方法/常量全集（698 个）挂在全局 `WebGLRenderingContext.prototype`**，但 gl 实例的原型链不过它 → `gl.clearColor` 等全 undefined。解法：在替换全局类**之前**捕获真 proto，把方法（绑 this）与常量拷为 gl 实例 own property。
-- **three r163+ 的 WebGL1 检查**用 `context instanceof WebGLRenderingContext`，EXGL 的类带品牌式 `Symbol.hasInstance`，改原型无效 → 运行时把全局 `WebGLRenderingContext` 换成哑类使检查落空（EXGL 实为 GLES3，`supportsWebGL2 = true`）。
-- **缺的查询函数按语义兜底**：`getExtension→null`、`getSupportedExtensions→[]`、`getShaderPrecisionFormat→{127,127,23}`、`getContextAttributes`。
+> **勘误（源码审计）**：本节最初记述的"gl 是裸 JSI HostObject、原型链断裂需手工嫁接 698 个成员、品牌式 `Symbol.hasInstance`、查询函数缺失需兜底"经对照 `node_modules/expo-gl@57.0.2` 源码（EXWebGLRenderer.cpp / EXWebGLMethods.def）**证伪**——那是黑屏排障期间误留下的旧版行为叙事。反证一直躺在运行日志里：`graftGLBindings: copied 0, native-present 698`，嫁接代码复制了 0 个成员，app 一直跑在实例自带的完整原型链上。相关死代码已删，以下为校准后的事实：
+
+- **gl 实例自带完整 GL 链**：expo-gl 用全局 `WebGL2RenderingContext` stub 经 `callAsConstructor` 创建实例，且其 `prototype` 非规范地**继承 `WebGLRenderingContext.prototype`**（全部 698 个方法/常量装在那里，源码注释明说不合规范但故意为之）→ `gl.clearColor` 等直接可用。教训：`copied 0` 这行日志当时就该让我们停下来重读源码，而不是带着无效的"保险"继续走。
+- **唯一必须的 hack——哑类替换**：three r163+ 用 `context instanceof WebGLRenderingContext` 判定 WebGL1 并抛错拒载；由于上述非规范继承，EXGL 的 WebGL2 上下文对这个检查**恰好为 true**（普通原型行走，expo-gl 没有自定义 `Symbol.hasInstance`）→ 首次创建 context 时把全局 `WebGLRenderingContext` 换成哑类使检查落空，一次性替换永久生效（EXGL 实为 GLES3/WebGL2 能力）。
+- 查询函数（`getExtension`/`getSupportedExtensions`/`getShaderPrecisionFormat`/`isContextLost`）在 57.0.2 全部原生实现，无需兜底。
 
 ### 渲染循环层（黑屏根因，最贵的教训）
 
@@ -83,6 +85,7 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 
 - `packages/game` 的 `load/save` 直连 `localStorage`，RN 无此全局——移植时把存储后端做成参数注入（web=localStorage，RN=AsyncStorage 封装）。
 - `FarmScene.tsx` PlotView 的 hover 光标直连 `document.body.style.cursor`——RN 无 document，Phase 2 手势重写（gesture-handler）时消除，勿照搬。
+- `packages/game` 的 `!plot.plantedAt` 会把合法的 epoch-0 时间戳误判为空地块——demo 无影响（零 diff 红线，现不改），接服务端供时时改 `=== null` 判空。
 
 ## Phase 1 web 侧踩坑（R3F 原型）
 
