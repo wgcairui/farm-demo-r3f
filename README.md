@@ -1,6 +1,6 @@
 # farm-demo
 
-「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线逐字节零 diff）。当前进度：**Phase 0（双端骨架）已完成并复验，Phase 1 web 3D 原型 D1~D5 已完成（D6 冻结中）**；Phase 2 移植到 `apps/mobile`（Expo + expo-gl）。进度总览见下方「进度」，验收勾选见 [docs/PRD.md](docs/PRD.md)。
+「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线逐字节零 diff）。当前进度：**Phase 0（双端骨架）已完成并复验，Phase 1 web 3D 原型 D1~D5 完成，D6 试玩反馈第一轮已落地**（生长进度条 + 作物差异化 + 惊喜事件系统）；Phase 2 移植到 `apps/mobile`（Expo + expo-gl）。进度总览见下方「进度」，验收勾选见 [docs/PRD.md](docs/PRD.md)。
 
 详细计划见 [docs/PRD.md](docs/PRD.md)，资产清单与授权见 [packages/assets/ASSETS.md](packages/assets/ASSETS.md)。
 
@@ -8,9 +8,9 @@
 
 ```
 farm-demo/
-├── apps/web/        # Web 3D 原型（Vite + React 19 + R3F）— Phase 1 D1~D5 完成
+├── apps/web/        # Web 3D 原型（Vite + React 19 + R3F）— Phase 1 D1~D5 完成 + D6 反馈轮
 │   └── src/farm3d/  # gltf 资产管线 / motion 动画规范 / effects 特效 / sfx 合成音效
-│                    # clickGuard 点击阈值 / layout 地块布局 / useFarm 状态壳 / FarmScene 场景
+│                    # events 事件系统（雨/旱/虫/施肥，React 外单例） / clickGuard / layout / useFarm / FarmScene
 ├── apps/mobile/     # RN 版（Expo SDK 57 + expo-gl）— Phase 0 hello-cube 跑通（模拟器 ~20fps），Phase 2 移植目标
 ├── packages/game/   # 游戏数值与状态机（纯 TS，双端共享，服务端同构；对基线零 diff）
 ├── packages/assets/ # CC0 3D 模型（glTF，poly.pizza/Quaternius）+ 授权记录
@@ -24,9 +24,24 @@ farm-demo/
 |---|---|---|
 | Phase 0 准备与骨架 | ✅ 完成（当日复验 4/4 + 源码审计清零） | workspaces / game 包零 diff / expo-gl×three 跑通 / 版本表 / gesture-handler 锁定 |
 | Phase 1 Web 原型 D1~D5 | ✅ 完成 | R3F 场景 + 核心循环 + 环绕相机 + 生长插值 + juice 四件套 + motion 动画规范（提交 61e0758 → 0cd6398） |
-| Phase 1 D6 冻结 | ⏳ 进行中 | 待：试玩 10 分钟修别扭点、录屏、Chrome Perf 长任务数据 |
+| Phase 1 D6 冻结 | ⏳ 进行中 | ✅试玩反馈第一轮已落地（见下）；待：第二轮试玩、录屏、Chrome Perf 长任务数据 |
 | Phase 2 RN 移植（9/13~） | ⬜ 未开始 | 渲染层 D1 冒烟后定：fiber native vs three 直写（倾向后者，背压循环已验证） |
 | Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
+
+### D6 试玩反馈第一轮（2026-09-06）
+
+试玩反馈「没进度条 / 作物没差异 / 缺惊喜」→ 当轮落地：
+
+- **生长进度条**：每块生长中地块头顶 billboard 细条（绿→金色定格→淡出，成熟弹跳接棒），进度直接吃 `packages/game` 预留的 `progressOf()`——原版就预留了这个接口。
+- **作物差异化**：🥕 耐旱（干旱半速）· 🌽 怕旱（不浇水冻结）且招虫（虫子权重 ×3）。种子栏带特性标签。
+- **惊喜事件系统**（`farm3d/events.ts`，React 外模块单例，零重渲染）：
+  - 🌧️ **雨**（15s）：全场生长 ×2，雨丝粒子 + 天空/光照变灰
+  - ☀️ **干旱**（20s）：🌽 冻结需点击浇水（橙环→蓝环），🥕 半速照长；天空变暖
+  - 🐛 **害虫**（12s 内点击驱赶，+2 金币；超时叶子被啃，收获减产一半）：红环警示环，越接近超时闪越急
+  - 🧪 **施肥**（工具按钮，5 金币）：该地块 +50% 速度直到收获（绿环）
+- **架构红线不破**：事件不改游戏规则，只改"有效生长时间戳"（bonusMs 偏移），`stageOf/progressOf` 拿到的仍是纯时间戳，服务端同构叙事成立；`packages/game` 零 diff 保持。
+- 附加状态（偏移/施肥/减产/浇水）存独立 localStorage 键 `farm-demo-extras-v1`，主存档仍归 game 包管。
+- 演示/测试钩子：`__farmEvent('rain'|'drought'|'pest')` 强制触发事件（面试现场演示可控），`__farmDebug()` 读内部状态。
 
 ## 快速开始
 

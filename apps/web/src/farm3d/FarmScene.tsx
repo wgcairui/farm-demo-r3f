@@ -1,11 +1,28 @@
 import { memo, Suspense, useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import type { Group, InstancedMesh, Mesh, MeshBasicMaterial } from 'three'
-import { Object3D, Vector3 } from 'three'
+import type {
+  DirectionalLight,
+  Group,
+  HemisphereLight,
+  InstancedMesh,
+  Mesh,
+  MeshBasicMaterial,
+} from 'three'
+import { Color, Object3D, Vector3 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { CROPS, type CropId, type SaveData } from '@farm/game'
+import { CROPS, progressOf, type CropId, type SaveData } from '@farm/game'
 import { ASSETS } from './assets'
 import { isClick } from './clickGuard'
+import {
+  getActive,
+  getBonus,
+  getFx,
+  isDrought,
+  isRain,
+  isThirsty,
+  PEST_TTL_MS,
+  tickEvents,
+} from './events'
 import {
   getPops,
   getCoins,
@@ -22,6 +39,7 @@ import { DUR, ease } from './motion'
 export interface FarmSceneProps {
   data: SaveData
   onPlot: (i: number) => void
+  onPest: () => void
 }
 
 // D3 环绕相机。边界 clamp：距离 3.2~14、极角 0.3~1.25 rad（不钻地、不翻顶）、禁平移。
@@ -54,11 +72,23 @@ function CameraRig() {
   return null
 }
 
+// 光照随天气过渡：雨调暗、旱调亮（lerp 慢过渡，避免瞬跳）
 const Lights = memo(function Lights() {
+  const dir = useRef<DirectionalLight>(null)
+  const hemi = useRef<HemisphereLight>(null)
+
+  useFrame(() => {
+    const dTarget = isRain() ? 1.5 : isDrought() ? 2.7 : 2.4
+    const hTarget = isRain() ? 0.85 : isDrought() ? 1.25 : 1.1
+    if (dir.current) dir.current.intensity += (dTarget - dir.current.intensity) * 0.04
+    if (hemi.current) hemi.current.intensity += (hTarget - hemi.current.intensity) * 0.04
+  })
+
   return (
     <>
-      <hemisphereLight args={[0xbfe8ff, 0x9c7a4f, 1.1]} />
+      <hemisphereLight ref={hemi} args={[0xbfe8ff, 0x9c7a4f, 1.1]} />
       <directionalLight
+        ref={dir}
         position={[5, 8, 4]}
         intensity={2.4}
         color={0xfff3dd}
@@ -84,6 +114,23 @@ const Ground = memo(function Ground() {
     </mesh>
   )
 })
+
+// 天气氛围：天空/雾色向目标色缓慢靠拢（<color attach> 的实例就在 scene.background 上）
+const SKY = new Color(0x87ceeb)
+const SKY_RAIN = new Color(0x9fb4c4)
+const SKY_DROUGHT = new Color(0xe0c98d)
+
+function WeatherMood() {
+  const scene = useThree((s) => s.scene)
+  useFrame(() => {
+    const target = isRain() ? SKY_RAIN : isDrought() ? SKY_DROUGHT : SKY
+    const bg = scene.background
+    if (bg instanceof Color) bg.lerp(target, 0.03)
+    const fog = scene.fog as { color: Color } | null
+    if (fog) fog.color.lerp(target, 0.03)
+  })
+  return null
+}
 
 interface MakeMap {
   dirt: () => Group
@@ -132,11 +179,11 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
       ;(ring.material as MeshBasicMaterial).opacity = 0.28 + 0.18 * k
     }
 
-    // 生长连续插值：Date.now 对齐 plantedAt 的时间基（帧级平滑，不等重渲染）
+    // 生长连续插值：Date.now 对齐 plantedAt 的时间基（帧级平滑，不等重渲染）；
+    // 进度含事件偏移（getBonus），与进度条/收获判定同源
     let base = 0.08
-    if (crop && plantedAt) {
-      const def = CROPS[crop]
-      const t = ease.clamp01((Date.now() - plantedAt) / (def.stageMs[0] + def.stageMs[1]))
+    if (crop && plantedAt !== null) {
+      const t = ease.clamp01(progressOf({ crop, plantedAt: plantedAt - getBonus(index) }, Date.now()))
       // 成熟瞬间的一次弹跳（D5：可收获信号）
       if (t >= 1 && !wasMatureRef.current) matureBounceAtRef.current = now
       wasMatureRef.current = t >= 1
@@ -172,7 +219,10 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
         e.stopPropagation()
         if (isClick(e.nativeEvent)) onPlot(index)
       }}
-      onPointerOver={() => (document.body.style.cursor = 'pointer')}
+      onPointerOver={() => {
+        ;(window as unknown as { __hoverPlot?: number }).__hoverPlot = index
+        document.body.style.cursor = 'pointer'
+      }}
       onPointerOut={() => (document.body.style.cursor = 'auto')}
     >
       <primitive object={dirt} />
@@ -189,11 +239,14 @@ function PlotView({ index, crop, plantedAt, hint, onPlot, make }: PlotViewProps)
           <primitive object={plant} />
         </group>
       )}
+      {/* D6：生长进度条（问的是"什么时候能收"）+ 地块状态环（渴/浇过/施过肥） */}
+      {crop && plantedAt !== null && <GrowthBar index={index} crop={crop} plantedAt={plantedAt} />}
+      <StatusRing index={index} crop={crop} />
     </group>
   )
 }
 
-function Farm({ data, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
+function Farm({ data, onPlot, make }: Pick<FarmSceneProps, 'data' | 'onPlot'> & { make: MakeMap }) {
   const afford = data.coins >= CROPS[data.selected].seedPrice
   return (
     <>
@@ -209,6 +262,217 @@ function Farm({ data, onPlot, make }: FarmSceneProps & { make: MakeMap }) {
         />
       ))}
     </>
+  )
+}
+
+// —— D6 生长进度条：始终朝向相机的细条，绿→金色定格→淡出（成熟弹跳接棒信号）——
+
+const BAR_W = 0.44
+
+function GrowthBar({
+  index,
+  crop,
+  plantedAt,
+}: {
+  index: number
+  crop: CropId
+  plantedAt: number
+}) {
+  const grp = useRef<Group>(null)
+  const bg = useRef<Mesh>(null)
+  const fill = useRef<Mesh>(null)
+  const bornAt = useRef(performance.now())
+  const doneAt = useRef<number | null>(null)
+
+  useFrame(({ camera }) => {
+    const g = grp.current
+    const b = bg.current
+    const f = fill.current
+    if (!g || !b || !f) return
+
+    const t = ease.clamp01(
+      progressOf({ crop, plantedAt: plantedAt - getBonus(index) }, Date.now()),
+    )
+    if (t >= 1 && doneAt.current === null) doneAt.current = performance.now()
+
+    const now = performance.now()
+    let opacity = Math.min(1, (now - bornAt.current) / DUR.fast)
+    if (doneAt.current !== null) {
+      // 成熟后金色定格 DUR.slow 再淡出，把"可收获"让位给作物弹跳
+      const k = (now - doneAt.current) / DUR.slow
+      if (k >= 1) {
+        g.visible = false
+        return
+      }
+      opacity *= 1 - k
+    }
+    g.visible = true
+    g.quaternion.copy(camera.quaternion)
+
+    const bm = b.material as MeshBasicMaterial
+    const fm = f.material as MeshBasicMaterial
+    bm.opacity = 0.55 * opacity
+    fm.opacity = opacity
+    fm.color.set(t >= 1 ? 0xffd24a : 0x8ee06a)
+    fm.color.multiplyScalar(opacity < 1 ? opacity : 1)
+    f.scale.x = Math.max(0.001, t)
+    f.position.x = -BAR_W / 2 + (BAR_W * t) / 2
+  })
+
+  const y = crop === 'corn' ? 0.95 : 0.62
+  return (
+    <group ref={grp} position={[0, y, 0]}>
+      <mesh ref={bg} raycast={() => null}>
+        <planeGeometry args={[BAR_W, 0.07]} />
+        <meshBasicMaterial color={0x2e2416} transparent opacity={0.55} depthWrite={false} />
+      </mesh>
+      <mesh ref={fill} raycast={() => null}>
+        <planeGeometry args={[BAR_W - 0.04, 0.042]} />
+        <meshBasicMaterial color={0x8ee06a} transparent depthWrite={false} />
+      </mesh>
+    </group>
+  )
+}
+
+// —— D6 地块状态环：干旱缺水橙红脉冲 > 已浇水蓝 > 已施肥绿，其余隐藏 ——
+
+function StatusRing({ index, crop }: { index: number; crop: CropId | null }) {
+  const ref = useRef<Mesh>(null)
+
+  useFrame(() => {
+    const m = ref.current
+    if (!m) return
+    const f = getFx(index)
+    const drought = isDrought()
+    let color = 0
+    let opacity = 0
+    let pulse = 0
+    if (drought && crop && isThirsty(crop) && !f?.watered) {
+      color = 0xff8c42
+      opacity = 0.42
+      pulse = 0.2
+    } else if (drought && f?.watered) {
+      color = 0x5ab7ff
+      opacity = 0.38
+    } else if (f?.fert) {
+      color = 0x7ee06a
+      opacity = 0.34
+    }
+    m.visible = opacity > 0
+    if (opacity > 0) {
+      const mat = m.material as MeshBasicMaterial
+      mat.color.set(color)
+      mat.opacity = opacity + pulse * Math.sin((performance.now() / 1000) * Math.PI * 4.8)
+    }
+  })
+
+  return (
+    <mesh ref={ref} rotation-x={-Math.PI / 2} position={[0, 0.055, 0]} visible={false} raycast={() => null}>
+      <ringGeometry args={[0.3, 0.38, 32]} />
+      <meshBasicMaterial transparent opacity={0.3} depthWrite={false} />
+    </mesh>
+  )
+}
+
+// —— D6 害虫：在目标作物头顶盘旋的小虫 + 红色警示环（越接近超时闪得越急）——
+
+function PestBug({ onPest }: { onPest: () => void }) {
+  const grp = useRef<Group>(null)
+  const ring = useRef<Mesh>(null)
+
+  useFrame(() => {
+    const g = grp.current
+    if (!g) return
+    const ev = getActive()
+    const on = ev?.type === 'pest'
+    g.visible = on
+    if (!on || !ev) return
+    const [px, pz] = plotPosition(ev.plot)
+    const t = performance.now() / 1000
+    g.position.set(
+      px + Math.cos(t * 2.1) * 0.13,
+      0.32 + Math.sin(t * 6) * 0.025,
+      pz + Math.sin(t * 2.1) * 0.13,
+    )
+    const urgency = 1 - Math.max(0, (ev.endAt - performance.now()) / PEST_TTL_MS)
+    if (ring.current) {
+      ;(ring.current.material as MeshBasicMaterial).opacity =
+        0.3 + 0.3 * (0.5 + 0.5 * Math.sin(t * Math.PI * (3 + 7 * urgency)))
+    }
+  })
+
+  return (
+    <group
+      ref={grp}
+      visible={false}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (isClick(e.nativeEvent)) onPest()
+      }}
+      onPointerOver={() => (document.body.style.cursor = 'pointer')}
+      onPointerOut={() => (document.body.style.cursor = 'auto')}
+    >
+      <mesh scale={[1, 0.8, 1.3]}>
+        <sphereGeometry args={[0.055, 12, 10]} />
+        <meshLambertMaterial color={0x3a2a20} />
+      </mesh>
+      <mesh position={[0, 0.012, 0.055]}>
+        <sphereGeometry args={[0.032, 10, 8]} />
+        <meshLambertMaterial color={0x241812} />
+      </mesh>
+      <mesh ref={ring} rotation-x={-Math.PI / 2} position={[0, -0.27, 0]} raycast={() => null}>
+        <ringGeometry args={[0.24, 0.31, 28]} />
+        <meshBasicMaterial color={0xff5252} transparent opacity={0.4} depthWrite={false} />
+      </mesh>
+    </group>
+  )
+}
+
+// —— D6 雨：90 条下落细柱循环回收，只有 rain 事件期间可见 ——
+
+const RAIN_COUNT = 90
+
+function RainParticles() {
+  const ref = useRef<InstancedMesh>(null)
+  const dummy = useMemo(() => new Object3D(), [])
+  const drops = useMemo(
+    () =>
+      Array.from({ length: RAIN_COUNT }, () => ({
+        x: (Math.random() - 0.5) * 12,
+        y: Math.random() * 7,
+        z: (Math.random() - 0.5) * 12,
+        v: 7 + Math.random() * 3,
+      })),
+    [],
+  )
+
+  useFrame((_, dt) => {
+    const mesh = ref.current
+    if (!mesh) return
+    const on = isRain()
+    mesh.visible = on
+    if (!on) return
+    const d = Math.min(dt, 0.05)
+    for (let i = 0; i < RAIN_COUNT; i++) {
+      const p = drops[i]
+      p.y -= p.v * d
+      if (p.y < 0) {
+        p.y = 6.5 + Math.random()
+        p.x = (Math.random() - 0.5) * 12
+        p.z = (Math.random() - 0.5) * 12
+      }
+      dummy.position.set(p.x, p.y, p.z)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  })
+
+  return (
+    <instancedMesh ref={ref} args={[undefined!, undefined!, RAIN_COUNT]} frustumCulled={false} visible={false}>
+      <boxGeometry args={[0.014, 0.3, 0.014]} />
+      <meshBasicMaterial color={0xaed6ff} transparent opacity={0.55} />
+    </instancedMesh>
   )
 }
 
@@ -304,6 +568,12 @@ function FloaterBridge() {
   return null
 }
 
+/** D6 事件驱动器：把每帧 delta 喂给事件系统（单例状态在 events.ts） */
+function EventsTicker({ plots }: { plots: SaveData['plots'] }) {
+  useFrame((_, dt) => tickEvents(Math.min(dt, 0.05) * 1000, plots))
+  return null
+}
+
 // —— 静态环境（memo + 实例只建一次）——
 
 const FenceRing = memo(function FenceRing() {
@@ -369,7 +639,7 @@ const Trees = memo(function Trees() {
   )
 })
 
-export default function FarmScene({ data, onPlot }: FarmSceneProps) {
+export default function FarmScene({ data, onPlot, onPest }: FarmSceneProps) {
   const dirtGltf = useGLTF(ASSETS.dirt)
   const carrotGltf = useGLTF(ASSETS.carrot)
   const cornGltf = useGLTF(ASSETS.corn)
@@ -394,9 +664,13 @@ export default function FarmScene({ data, onPlot }: FarmSceneProps) {
         <Farm data={data} onPlot={onPlot} make={make} />
         <FenceRing />
         <Trees />
+        <PestBug onPest={onPest} />
+        <RainParticles />
         <PopLayer />
         <CoinParticles />
         <FloaterBridge />
+        <WeatherMood />
+        <EventsTicker plots={data.plots} />
       </Suspense>
     </>
   )

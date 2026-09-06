@@ -123,6 +123,50 @@ body {
   white-space: nowrap;
 }
 
+.seed .trait {
+  color: #5c7a44;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.seed.fert.active {
+  border-color: #7ee06a;
+  background: #f4ffe9;
+}
+
+/* 事件横幅：显隐与文案全部由 events.ts 命令式驱动，CSS 只管外观 */
+#event-banner {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  left: 50%;
+  transform: translate(-50%, -6px);
+  opacity: 0;
+  transition: opacity 300ms ease, transform 300ms ease;
+  pointer-events: none;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(38, 70, 104, 0.82);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  z-index: 6;
+}
+
+#event-banner.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+#event-banner.drought {
+  background: rgba(146, 94, 22, 0.88);
+}
+
+#event-banner.pest {
+  background: rgba(150, 40, 32, 0.88);
+}
+
 .reset {
   width: 44px;
   border: none;
