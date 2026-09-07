@@ -7,6 +7,7 @@ import FarmScene from './farm3d/FarmScene'
 import { useFarm } from './farm3d/useFarm'
 import { setMuted, loadVolumePref } from './farm3d/sfx'
 import { subscribeCombo } from './farm3d/combo'
+import { loadTutorialDone, skipTutorial, startTutorial } from './farm3d/tutorial'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -27,12 +28,17 @@ function readHintsDismissed(): boolean {
 }
 
 export default function App() {
-  const { data, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
+  const { data, tutorial, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
   const [fertMode, setFertMode] = useState(false)
   const [hintsDismissed, setHintsDismissed] = useState(() => readHintsDismissed())
   // 静音状态：useState 初始化时调用 sfx.loadVolumePref()（内部读 localStorage 并同步 muted 标志 + masterGain.gain）
   const [muted, setMutedState] = useState<boolean>(() => loadVolumePref())
   const [comboFlash, setComboFlash] = useState(false)
+
+  // P2-1：首次访问且未完成引导 → 自动开始
+  useEffect(() => {
+    if (!loadTutorialDone()) startTutorial()
+  }, [])
 
   useEffect(() => {
     const onDismiss = () => setHintsDismissed(true)
@@ -118,6 +124,26 @@ export default function App() {
         </div>
       )}
 
+      {/* P2-1 新手引导 overlay：仅在引导进行中（step !== 0 && step !== 'done'）显示 */}
+      {tutorial.step !== 0 && tutorial.step !== 'done' && (
+        <div className="tutorial-overlay" role="status">
+          <span>
+            {tutorial.step === 1 && 'Step 1/3: 点这里选胡萝卜种子'}
+            {tutorial.step === 2 && 'Step 2/3: 点这里播种到空地'}
+            {tutorial.step === 3 && 'Step 3/3: 等待作物成熟后点击收获'}
+          </span>
+          <button onClick={skipTutorial} type="button">× 跳过</button>
+          <button onClick={skipTutorial} type="button">不再提示</button>
+        </div>
+      )}
+
+      {/* 引导完成后的庆祝提示 */}
+      {tutorial.step === 'done' && tutorial.complete && (
+        <div className="tutorial-overlay" role="status">
+          <span>🎉 太棒了！现在你可以自由探索</span>
+        </div>
+      )}
+
       <div className="seedbar">
         {(Object.keys(CROPS) as CropId[]).map((id) => {
           const def = CROPS[id]
@@ -125,7 +151,7 @@ export default function App() {
           return (
             <button
               key={id}
-              className={`seed ${data.selected === id && !fertMode ? 'active' : ''} ${afford ? '' : 'poor'}`}
+              className={`seed ${data.selected === id && !fertMode ? 'active' : ''} ${afford ? '' : 'poor'} ${tutorial.step === 1 && id === 'carrot' ? 'tutorial-target' : ''}`}
               onClick={() => pickSeed(id)}
             >
               <span className="emoji">{def.emoji}</span>

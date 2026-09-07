@@ -1,4 +1,4 @@
-import { memo, Suspense, useEffect, useMemo, useRef } from 'react'
+import { memo, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import type {
   DirectionalLight,
@@ -50,6 +50,8 @@ import { CAMERA, DAY_NIGHT, DUR, ease } from './motion'
 import { readHarvestCamera, resetHarvestCamera, getCameraSequence } from './cameraMotion'
 import { PLOT_STATE_TINT } from './landState'
 import { toon, toonGradient } from './toon'
+import { subscribeTutorial, type TutorialState } from './tutorial'
+import TutorialArrow from './TutorialArrow'
 
 export interface FarmSceneProps {
   data: SaveData
@@ -1071,6 +1073,12 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
   const carrotGltf = useGLTF(ASSETS.carrot)
   const cornGltf = useGLTF(ASSETS.corn)
 
+  // P2-1：订阅 tutorial 单例，在 Canvas 内渲染 3D 引导箭头
+  const [tutorial, setTutorial] = useState<TutorialState | null>(null)
+  useEffect(() => {
+    return subscribeTutorial(setTutorial)
+  }, [])
+
   const make = useMemo<MakeMap>(
     () => ({
       dirt: () => normalized(dirtGltf.scene, { width: 1.02 }),
@@ -1107,6 +1115,13 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
         <EventsTicker plots={data.plots} />
         <WitheredRecoverHint plots={data.plots} />
         <PlotStateTicker plots={data.plots} onTickPlots={onTickPlots} />
+        {/* P2-1 新手引导 3D 箭头：step=2 指向 plot 0，step=3 指向目标地块 */}
+        {tutorial?.step === 2 && tutorial.targetPlot !== null && (
+          <TutorialArrow target="plot" plotIndex={tutorial.targetPlot} />
+        )}
+        {tutorial?.step === 3 && tutorial.targetPlot !== null && (
+          <TutorialArrow target="plot-mature" plotIndex={tutorial.targetPlot} />
+        )}
       </Suspense>
     </>
   )

@@ -369,3 +369,36 @@ body {
   opacity: 0; transition: opacity 150ms ease-out;
 }
 #combo-flash.show { opacity: 1; }
+
+/* P2-1 新手引导：胡萝卜种子按钮高亮脉冲 */
+.tutorial-target {
+  animation: tutorialPulse 1s ease-in-out infinite;
+  border-color: #ffd24a !important;
+}
+@keyframes tutorialPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,210,74,0.7); }
+  50% { box-shadow: 0 0 0 12px rgba(255,210,74,0); }
+}
+
+/* P2-1 新手引导：顶部居中提示条 */
+.tutorial-overlay {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 80px);
+  left: 50%; transform: translateX(-50%);
+  background: rgba(255, 210, 74, 0.95);
+  color: #5a3500;
+  font-weight: 700;
+  padding: 12px 20px;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  z-index: 7;
+  display: flex; align-items: center; gap: 12px;
+  animation: hintFadeIn 280ms ease-out;
+}
+.tutorial-overlay button {
+  background: rgba(255,255,255,0.8);
+  border: none; padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px; font-weight: 600;
+}

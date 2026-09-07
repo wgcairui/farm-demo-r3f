@@ -385,3 +385,30 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 - 任何非收获动作（播种/施肥/浇水/拍虫/清理 withered）立即打断 combo
 
 **破零 diff 红线**：未破；`packages/game` 零改动；`package.json` 未新增依赖。
+
+---
+
+### P2-1 实施回顾（新手引导 3 步）
+
+**目标**：首屏自动触发 3 步引导（选种 → 播种 → 收获），引导完成/跳过后永久记忆，不再自动出现。
+
+**关键改动**：
+
+- **新建 `apps/web/src/farm3d/tutorial.ts`**：命令式单例，step 机器（0=未开始, 1=选种, 2=播种, 3=等待收获, 'done'=完成）；`loadTutorialDone()` / `startTutorial()` / `nextStep(plantedPlot?)` / `skipTutorial()` / `finishTutorial()` / `subscribeTutorial(fn)`；localStorage key = `farm-demo-tutorial-v1`
+
+- **新建 `apps/web/src/farm3d/TutorialArrow.tsx`**：R3F 3D 箭头组件，target='plot'|'plot-mature' 时渲染脉冲圆环 + 向下箭头（圆锥 + 圆柱），useFrame 驱动上下浮动 + Y轴旋转
+
+- **`apps/web/src/farm3d/useFarm.ts`**：新增 tutorial state（订阅单例）；`select(id)` 触发时若 step===1 则 `nextStep()`；`handlePlot(i)` empty+seed 时若 step===2 且 i===targetPlot 则 `nextStep(i)`；`handlePlot(i)` mature 时若 step===3 且 i===targetPlot 则 `finishTutorial()`
+
+- **`apps/web/src/farm3d/FarmScene.tsx`**：`useEffect` 订阅 tutorial 单例；条件挂载 `<TutorialArrow target="plot" plotIndex={targetPlot} />`（step=2）和 `<TutorialArrow target="plot-mature" plotIndex={targetPlot} />`（step=3）
+
+- **`apps/web/src/App.tsx`**：`useFarm()` 解构出 `tutorial`；首屏 `useEffect` 检测未完成则 `startTutorial()`；顶部居中 `.tutorial-overlay` 提示条（含"× 跳过"+"不再提示"按钮）；胡萝卜种子按钮 step===1 时加 `.tutorial-target` 高亮类
+
+- **`apps/web/src/App.css`**：追加 `.tutorial-target`（金色脉冲边框动画）+ `.tutorial-overlay`（顶部居中黄色提示条）
+
+**3 步触发点**：
+1. 首屏自动开始 → step=1 → 高亮胡萝卜种子按钮 → 用户点击任意种子 → step=2（plot 0 脉冲箭头）
+2. 用户点击 plot 0 → step=3（目标地块脉冲箭头）
+3. 作物成熟后用户点击目标地块 → 引导完成 + 写 localStorage
+
+**破零 diff 红线**：未破；`packages/game` 零改动；`package.json` 未新增依赖。
