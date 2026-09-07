@@ -91,12 +91,16 @@ const OUTLINE_MAT = new MeshBasicMaterial({
  * 给一个 mesh 附加 inverted-hull 描边壳。
  * 直接 addChild 到 mesh 上，返回新增的轮廓 mesh（也方便上层 traverse 找到）。
  * scale 默认 1.03（外扩 3%，细描边）。
+ *
+ * D12 第五轮 fix：shell 必须标记 _outlinedShell=true，attachOutlineDeep.traverse
+ * 会遍历到 shell，shell 是 mesh，若不带标记会被重复 addOutline → 死循环 stack overflow。
  */
 export function attachOutline(mesh: Mesh, scale = 1.03): Mesh {
   const shell = new Mesh(mesh.geometry, OUTLINE_MAT)
   shell.scale.setScalar(scale)
   shell.castShadow = false
   shell.receiveShadow = false
+  shell.userData._outlinedShell = true
   mesh.add(shell)
   return shell
 }
@@ -104,13 +108,15 @@ export function attachOutline(mesh: Mesh, scale = 1.03): Mesh {
 /**
  * 批量给 Group / Mesh 子树附加描边。
  * 跳过已有 _outlined 标记的 mesh（避免重复）。
+ * 跳过 _outlinedShell 标记的 mesh（描边的外壳本身不应再被描边，否则无限递归）。
  * 跳过 transparent/opacity<1 的 mesh（描边会盖住透明部分）。
  */
 export function attachOutlineDeep(root: { traverse: (cb: (o: object) => void) => void }, scale = 1.03) {
   root.traverse((obj) => {
-    const m = obj as Mesh & { _outlined?: boolean }
+    const m = obj as Mesh & { _outlined?: boolean; userData?: { _outlinedShell?: boolean } }
     if (!m.isMesh) return
     if (m._outlined) return
+    if (m.userData?._outlinedShell) return
     const mat = m.material as MeshLambertMaterial | MeshToonMaterial | undefined
     if (mat && ('transparent' in mat) && mat.transparent) return
     if (m.geometry && m.geometry.attributes.position) {
