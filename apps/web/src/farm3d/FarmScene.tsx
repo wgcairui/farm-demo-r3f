@@ -44,7 +44,7 @@ import { DecoLayer } from './deco'
 import { mountFloaterDom, queueFloater, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
-import { CAMERA, DUR, ease } from './motion'
+import { CAMERA, DAY_NIGHT, DUR, ease } from './motion'
 import { readHarvestCamera, resetHarvestCamera, getCameraSequence } from './cameraMotion'
 import { PLOT_STATE_TINT } from './landState'
 import { toon, toonGradient } from './toon'
@@ -232,18 +232,65 @@ function CameraRig() {
   return null
 }
 
-// 光照随天气过渡：雨调暗、旱调亮（lerp 慢过渡，避免瞬跳）
+// P1-6 昼夜氛围：光照色温与强度随真实时间缓慢过渡，雨/旱天气叠加在昼夜基准上（35% 权重）
+const getDayNightDirColor = (hour: number): Color => {
+  const { lerp } = Color.prototype
+  if (hour < 5) return new Color(0x6a8aa8) // 深夜
+  if (hour < 8) {
+    const t = (hour - 5) / 3
+    return new Color(0x6a8aa8).lerp(new Color(0xffb070), t) // 黎明 5-8
+  }
+  if (hour < 18) return new Color(0xfff3dd) // 白天
+  if (hour < 20) {
+    const t = (hour - 18) / 2
+    return new Color(0xfff3dd).lerp(new Color(0xffb070), t) // 黄昏 18-20
+  }
+  return new Color(0x6a8aa8) // 夜间
+}
+
+const getDayNightDirIntensity = (hour: number): number => {
+  if (hour < 5) return 0.6 + (hour + 19) / 24 * 1.2 // 深夜缓升
+  if (hour < 8) return 1.8 // 黎明
+  if (hour < 18) return 2.4 // 白天
+  if (hour < 20) return 2.4 - (hour - 18) / 2 * 0.6 // 黄昏缓降
+  return 0.6
+}
+
+const getDayNightHemiIntensity = (hour: number): number => {
+  if (hour < 5) return 0.25 + (hour + 19) / 24 * 0.45
+  if (hour < 8) return 0.7
+  if (hour < 18) return 1.1
+  if (hour < 20) return 1.1 - (hour - 18) / 2 * 0.4
+  return 0.25
+}
+
 const Lights = memo(function Lights() {
   const dir = useRef<DirectionalLight>(null)
   const hemi = useRef<HemisphereLight>(null)
 
   useFrame((_, dt) => {
-    const dTarget = isRain() ? 1.5 : isDrought() ? 2.7 : 2.4
-    const hTarget = isRain() ? 0.85 : isDrought() ? 1.25 : 1.1
-    // 帧率无关阻尼 1-e^(-k·dt)（k=6，dt 钳 0.1s）：60/120Hz 过渡速度一致，替代裸 lerp 系数
-    const k = 1 - Math.exp(-6 * Math.min(dt, 0.1))
-    if (dir.current) dir.current.intensity += (dTarget - dir.current.intensity) * k
-    if (hemi.current) hemi.current.intensity += (hTarget - hemi.current.intensity) * k
+    const now = new Date()
+    const hour = now.getHours() + now.getMinutes() / 60
+
+    // 昼夜基准
+    const dayDirColor = getDayNightDirColor(hour)
+    const dayDirIntensity = getDayNightDirIntensity(hour)
+    const dayHemiIntensity = getDayNightHemiIntensity(hour)
+
+    // 天气叠加（35% 权重）
+    const weatherDirIntensity = isRain() ? 1.5 : isDrought() ? 2.7 : dayDirIntensity
+    const weatherHemiIntensity = isRain() ? 0.85 : isDrought() ? 1.25 : dayHemiIntensity
+
+    const finalDirColor = dayDirColor.clone().lerp(new Color(isRain() ? 0x6a9ab8 : isDrought() ? 0xffb878 : dayDirColor), 0.35)
+    const finalDirIntensity = dayDirIntensity + (weatherDirIntensity - dayDirIntensity) * 0.35
+    const finalHemiIntensity = dayHemiIntensity + (weatherHemiIntensity - dayHemiIntensity) * 0.35
+
+    const k = 1 - Math.exp(-DAY_NIGHT.k * Math.min(dt, 0.1))
+    if (dir.current) {
+      dir.current.color.lerp(finalDirColor, k)
+      dir.current.intensity += (finalDirIntensity - dir.current.intensity) * k
+    }
+    if (hemi.current) hemi.current.intensity += (finalHemiIntensity - hemi.current.intensity) * k
   })
 
   return (
@@ -291,17 +338,39 @@ function ToonMat({ color, emissive, emissiveIntensity }: { color: number; emissi
   )
 }
 
-// 天气氛围：天空/雾色向目标色缓慢靠拢（<color attach> 的实例就在 scene.background 上）
-const SKY = new Color(0x87ceeb)
-const SKY_RAIN = new Color(0x9fb4c4)
-const SKY_DROUGHT = new Color(0xe0c98d)
+// P1-6 昼夜氛围天空色：真实时间驱动，24h 分段插值（5am 黎明 / 8am 早晨 / 12pm 中午 / 6pm 黄昏 / 8pm 入夜 / 12am 深夜）
+const getDayNightSky = (hour: number): Color => {
+  if (hour < 5) return new Color(0x1a1f3a) // 深夜
+  if (hour < 8) {
+    const t = (hour - 5) / 3
+    return new Color(0x1a1f3a).lerp(new Color(0xffb8c0), t) // 黎明 5-8
+  }
+  if (hour < 18) {
+    const t = (hour - 8) / 10
+    return new Color(0xffb8c0).lerp(new Color(0x87ceeb), t) // 早晨 8-18
+  }
+  if (hour < 20) {
+    const t = (hour - 18) / 2
+    return new Color(0x87ceeb).lerp(new Color(0xf0a878), t) // 黄昏 18-20
+  }
+  return new Color(0x1a1f3a) // 夜间
+}
+
+// P1-6 天气氛围：天空/雾色以昼夜为基准，天气色偏叠加 35% 权重
+const SKY_RAIN_OVERLAY = new Color(0x9fb4c4)
+const SKY_DROUGHT_OVERLAY = new Color(0xe0c98d)
 
 function WeatherMood() {
   const scene = useThree((s) => s.scene)
   useFrame((_, dt) => {
-    const target = isRain() ? SKY_RAIN : isDrought() ? SKY_DROUGHT : SKY
-    // 同 Lights：帧率无关阻尼（k=5），天空过渡速度不随刷新率变化
-    const k = 1 - Math.exp(-5 * Math.min(dt, 0.1))
+    const now = new Date()
+    const hour = now.getHours() + now.getMinutes() / 60
+
+    const dayTarget = getDayNightSky(hour)
+    const weatherTarget = isRain() ? SKY_RAIN_OVERLAY : isDrought() ? SKY_DROUGHT_OVERLAY : dayTarget
+    const target = dayTarget.clone().lerp(weatherTarget, 0.35)
+
+    const k = 1 - Math.exp(-DAY_NIGHT.k * Math.min(dt, 0.1))
     const bg = scene.background
     if (bg instanceof Color) bg.lerp(target, k)
     const fog = scene.fog as { color: Color } | null

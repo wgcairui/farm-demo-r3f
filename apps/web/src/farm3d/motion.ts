@@ -27,3 +27,8 @@ export const ease = {
   /** 0→1→0 钟形：压下去再回来、弹一下再落回，都用它 */
   sinPing: (t: number) => Math.sin(ease.clamp01(t) * Math.PI),
 }
+
+// P1-6 昼夜氛围：帧率无关阻尼系数，越小越柔
+export const DAY_NIGHT = {
+  k: 4,
+} as const
