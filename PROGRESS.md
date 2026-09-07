@@ -8,7 +8,7 @@
 
 ## 当前状态
 
-**Phase 1 D7~D12 全部完成**，prod 单线部署：Vercel CDN。
+**Phase 1 D7~D12 + P1-3 全部完成**，prod 单线部署：Vercel CDN。
 
 - **Phase 2 RN 移植按用户决定暂缓**，当前以 Web 版作为面试演示交付物。
 

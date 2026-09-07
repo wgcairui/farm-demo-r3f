@@ -44,7 +44,8 @@ import { DecoLayer } from './deco'
 import { mountFloaterDom, queueFloater, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
-import { DUR, ease } from './motion'
+import { CAMERA, DUR, ease } from './motion'
+import { readHarvestCamera } from './cameraMotion'
 import { PLOT_STATE_TINT } from './landState'
 import { toon, toonGradient } from './toon'
 
@@ -62,6 +63,21 @@ function CameraRig() {
   const camera = useThree((s) => s.camera)
   const gl = useThree((s) => s.gl)
   const controlsRef = useRef<OrbitControls | null>(null)
+  // P1-3 相机动效：保存初始视角（reset 的标准态）和当前运行中动画的快照
+  const introStartRef = useRef<number | null>(null)
+  const introFromRef = useRef<Vector3 | null>(null)
+  const introToRef = useRef<Vector3 | null>(null)
+  const harvestAnimRef = useRef<{
+    fromPos: Vector3
+    fromTarget: Vector3
+    toTarget: Vector3
+    restPos: Vector3
+    restTarget: Vector3
+    startAt: number
+    duration: number
+  } | null>(null)
+  const lastHarvestSeqRef = useRef(0)
+  const tmpVec = useMemo(() => new Vector3(), [])
 
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement)
@@ -73,14 +89,31 @@ function CameraRig() {
     controls.maxDistance = 14
     controls.minPolarAngle = 0.3
     controls.maxPolarAngle = 1.25
+    // P1-3：保存 Canvas camera prop 注入的「默认机位」作为开场运镜的终点
+    // 同时作为 R 键 reset 的标准态（用 controls.saveState 保存）。
+    // 注意：camera.position 此时已经等于 props 中的默认值
+    const defaultPos = camera.position.clone()
+    camera.userData._defaultPos = defaultPos
+    introToRef.current = defaultPos
+    // P1-3 开场运镜：从更远更高的机位滑入默认视角
+    const introFrom = new Vector3(camera.position.x * 1.18, camera.position.y * 1.22, camera.position.z * 1.18)
+    camera.position.copy(introFrom)
+    introFromRef.current = introFrom
+    introStartRef.current = performance.now()
     controls.update()
-    controls.saveState() // 记录初始视角，按 R 键可恢复
+    // 开场期间禁止用户操作 OrbitControls，防止运镜途中被拖拽打断
+    controls.enabled = false
     controlsRef.current = controls
     // D12 第三轮：监听 R 键 reset 到 saveState 记录的初始视角。
     // 之前拖动相机后没出口恢复，用户只能刷新页面——D12 后仓库挪到 (-1.5, -3.0)
     // 后默认视角被部分遮挡（用户反馈），提供 R 键重置是低成本修复。
+    // P1-3：reset 同时取消当前收获聚焦动画，避免运镜冲突。
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'r' || e.key === 'R') controls.reset()
+      if (e.key === 'r' || e.key === 'R') {
+        harvestAnimRef.current = null
+        introStartRef.current = null
+        controls.reset()
+      }
     }
     window.addEventListener('keydown', onKey)
     // clickGuard 锚点必须在 canvas DOM 元素上：PlotView onClick 给的 e.nativeEvent
@@ -96,7 +129,83 @@ function CameraRig() {
     }
   }, [camera, gl])
 
-  useFrame(() => controlsRef.current?.update())
+  useFrame(() => {
+    const controls = controlsRef.current
+    if (!controls) return
+    const now = performance.now()
+
+    // 开场运镜：从 introFrom 沿轨道插值到默认位置，期间禁用 OrbitControls
+    if (introStartRef.current !== null && introFromRef.current && introToRef.current) {
+      const elapsed = now - introStartRef.current
+      const t = ease.clamp01(elapsed / CAMERA.introMs)
+      const k = ease.outCubic(t)
+      camera.position.lerpVectors(introFromRef.current, introToRef.current, k)
+      controls.update()
+      if (t >= 1) {
+        introStartRef.current = null
+        introFromRef.current = null
+        introToRef.current = null
+        controls.enabled = true
+        controls.saveState() // 把默认机位记录为 R 键 reset 的标准态
+      }
+      return
+    }
+
+    // 收获聚焦动画：推进已有动画，否则检查新事件
+    const harvest = readHarvestCamera()
+    if (harvest.event && harvest.sequence !== lastHarvestSeqRef.current) {
+      lastHarvestSeqRef.current = harvest.sequence
+      const ev = harvest.event
+      // 收割时记录「回位态」（动画前的 user 视角）
+      harvestAnimRef.current = {
+        fromPos: camera.position.clone(),
+        fromTarget: controls.target.clone(),
+        toTarget: new Vector3(ev.x, 0.25, ev.z),
+        restPos: camera.position.clone(),
+        restTarget: controls.target.clone(),
+        startAt: now,
+        duration: CAMERA.harvestMs,
+      }
+      controls.enabled = false
+    }
+
+    const anim = harvestAnimRef.current
+    if (anim) {
+      const t = ease.clamp01((now - anim.startAt) / anim.duration)
+      // 前半：推近到目标地块；后半：回位到 restPos/restTarget
+      const half = ease.outCubic(t < 0.5 ? t * 2 : 1 - (t - 0.5) * 2)
+      if (t < 0.5) {
+        // 距离：当前 -> 缩短到 harvestZoom
+        const fromDist = tmpVec.copy(anim.fromPos).sub(anim.fromTarget).length()
+        const targetDist = fromDist * CAMERA.harvestZoom
+        const dir = tmpVec.copy(anim.fromPos).sub(anim.fromTarget).normalize()
+        camera.position.copy(anim.fromTarget).addScaledVector(dir, fromDist + (targetDist - fromDist) * half)
+        // target：从 fromTarget 滑向 toTarget
+        controls.target.lerpVectors(anim.fromTarget, anim.toTarget, half)
+      } else {
+        // 距离：从缩短态回位到 fromDist
+        const fromDist = tmpVec.copy(anim.fromPos).sub(anim.fromTarget).length()
+        const targetDist = fromDist * CAMERA.harvestZoom
+        const dir = tmpVec.copy(anim.fromPos).sub(anim.fromTarget).normalize()
+        const restDist = tmpVec.copy(anim.restPos).sub(anim.restTarget).length()
+        const restDir = tmpVec.copy(anim.restPos).sub(anim.restTarget).normalize()
+        const dist = targetDist + (restDist - targetDist) * half
+        camera.position.copy(anim.restTarget).addScaledVector(restDir, dist)
+        controls.target.lerpVectors(anim.toTarget, anim.restTarget, half)
+      }
+      controls.update()
+      if (t >= 1) {
+        // 恢复用户控制
+        controls.target.copy(anim.restTarget)
+        controls.update()
+        controls.saveState()
+        controls.enabled = true
+        harvestAnimRef.current = null
+      }
+    } else {
+      controls.update()
+    }
+  })
 
   return null
 }

@@ -11,6 +11,15 @@ export const DUR = {
   linger: 900,
 } as const
 
+export const CAMERA = {
+  /** 首次进入时的开场运镜时长 */
+  introMs: 600,
+  /** 收获聚焦的推近与回位总时长 */
+  harvestMs: 600,
+  /** 收获时相机距离缩短比例 */
+  harvestZoom: 0.88,
+} as const
+
 export const ease = {
   clamp01: (t: number) => Math.min(1, Math.max(0, t)),
   outQuad: (t: number) => 1 - (1 - t) * (1 - t),

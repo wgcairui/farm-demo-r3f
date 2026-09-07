@@ -21,6 +21,7 @@ import {
 import { spawnCoinBurst, spawnLeafBurst, spawnShockwave, triggerShake } from './effects'
 import { clearFloaters, queueFloater } from './floaters'
 import { plotPosition } from './layout'
+import { notifyHarvestCamera } from './cameraMotion'
 import { playCoin, playFertilize, playHarvest, playPlant, playSplash, playSquash } from './sfx'
 
 export function useFarm() {
@@ -98,6 +99,7 @@ export function useFarm() {
         window.setTimeout(playCoin, 90)
         spawnCoinBurst(px, 0.3, pz)
         queueFloater(px, 0.85, pz, `+${gain}${isDamaged(i) ? ' 🐛' : ''}`, { hero: true })
+        notifyHarvestCamera(px, pz)
         onHarvest(i)
         return
       }
