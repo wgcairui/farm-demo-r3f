@@ -42,7 +42,9 @@ import {
   updateCoins,
 } from './effects'
 import { DecoLayer } from './deco'
+import DecorationItem from './deco/Decorations'
 import Tree from './deco/Tree'
+import { getDecorations, subscribeDecorations, type Decoration } from './decorations'
 import { mountFloaterDom, queueFloater, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
@@ -1088,6 +1090,12 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
     [dirtGltf, carrotGltf, cornGltf],
   )
 
+  // P2-3：订阅 decorations 单例，渲染玩家放置的摆件
+  const [decorations, setDecorations] = useState<Decoration[]>(getDecorations)
+  useEffect(() => {
+    return subscribeDecorations(setDecorations)
+  }, [])
+
   return (
     <>
       <color attach="background" args={[0x87ceeb]} />
@@ -1104,6 +1112,9 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
         <Tree kind="NormalTree_4" height={1.5} position={[-4.3, 1.4]} rotationY={1.1} />
         <Tree kind="NormalTree_1" height={1.3} position={[1.0, -3.6]} rotationY={0.9} />
         <DecoLayer />
+        {decorations.map((d) => (
+          <DecorationItem key={d.id} kind={d.kind} position={[d.x, d.z]} rotationY={d.rotY} />
+        ))}
         <PestBug onPest={onPest} />
         <RainParticles />
         <PopLayer />

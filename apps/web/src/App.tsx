@@ -8,6 +8,13 @@ import { useFarm } from './farm3d/useFarm'
 import { setMuted, loadVolumePref } from './farm3d/sfx'
 import { subscribeCombo } from './farm3d/combo'
 import { dismissTutorialOnce, loadTutorialDone, skipTutorial, startTutorial } from './farm3d/tutorial'
+import {
+  addDecoration,
+  gridCellToWorld,
+  GRID_COLS,
+  GRID_ROWS,
+  type DecorationKind,
+} from './farm3d/decorations'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -17,6 +24,22 @@ const TRAITS: Record<CropId, string> = {
 
 const HINTS_KEY = 'farm-demo-hints-v1'
 const HINT_DISMISS_EVENT = 'farm:hint-dismiss'
+
+/** P2-3 摆件 emoji 表 */
+const DECO_EMOJI: Record<DecorationKind, string> = {
+  windmill: '🗼',
+  scarecrow: '🎃',
+  barrel: '🛢',
+  fence: '🪵',
+}
+
+/** P2-3 摆件中文名 */
+const DECO_NAME: Record<DecorationKind, string> = {
+  windmill: '风车',
+  scarecrow: '稻草人',
+  barrel: '木桶',
+  fence: '木栅栏',
+}
 
 /** localStorage 读失败（隐私模式、SSR、塞满）时一律视为「未关闭过」 */
 function readHintsDismissed(): boolean {
@@ -34,6 +57,11 @@ export default function App() {
   // 静音状态：useState 初始化时调用 sfx.loadVolumePref()（内部读 localStorage 并同步 muted 标志 + masterGain.gain）
   const [muted, setMutedState] = useState<boolean>(() => loadVolumePref())
   const [comboFlash, setComboFlash] = useState(false)
+
+  // P2-3 摆件放置模式
+  const [placingMode, setPlacingMode] = useState(false)
+  const [placingKind, setPlacingKind] = useState<DecorationKind | null>(null)
+  const [decorationPickerOpen, setDecoPickerOpen] = useState(false)
 
   // P2-1：首次访问且未完成引导 → 自动开始
   useEffect(() => {
@@ -55,6 +83,20 @@ export default function App() {
       }
     })
   }, [])
+
+  // P2-3：ESC 键取消摆件放置模式
+  useEffect(() => {
+    if (!placingMode) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPlacingMode(false)
+        setPlacingKind(null)
+        setDecoPickerOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [placingMode])
 
   const closeHintsOnce = () => setHintsDismissed(true)
   const closeHintsForever = () => {
@@ -184,10 +226,69 @@ export default function App() {
         >
           {muted ? '🔇' : '🔊'}
         </button>
+        <button
+          className={`deco-btn ${decorationPickerOpen || placingMode ? 'active' : ''}`}
+          onClick={() => {
+            const wasOpen = decorationPickerOpen
+            setDecoPickerOpen(!wasOpen)
+            if (wasOpen) {
+              setPlacingMode(false)
+              setPlacingKind(null)
+            }
+          }}
+          type="button"
+          title="装饰摆件"
+        >
+          🏠
+        </button>
         <button className="reset" onClick={reset}>
           ↺
         </button>
       </div>
+
+      {/* P2-3 摆件选择浮层 */}
+      {decorationPickerOpen && !placingMode && (
+        <div className="deco-picker" role="dialog" aria-label="选择摆件">
+          {(['windmill', 'scarecrow', 'barrel', 'fence'] as DecorationKind[]).map((kind) => (
+            <button
+              key={kind}
+              className="deco-card"
+              onClick={() => {
+                setPlacingKind(kind)
+                setPlacingMode(true)
+                setDecoPickerOpen(false)
+              }}
+              type="button"
+            >
+              <span className="emoji">{DECO_EMOJI[kind]}</span>
+              <span>{DECO_NAME[kind]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* P2-3 网格放置覆盖层 */}
+      {placingMode && (
+        <div
+          className="deco-grid"
+          onClick={(e) => {
+            if (!placingKind) return
+            const rect = e.currentTarget.getBoundingClientRect()
+            const col = Math.floor(((e.clientX - rect.left) / rect.width) * GRID_COLS)
+            const row = Math.floor(((e.clientY - rect.top) / rect.height) * GRID_ROWS)
+            const clampedCol = Math.max(0, Math.min(GRID_COLS - 1, col))
+            const clampedRow = Math.max(0, Math.min(GRID_ROWS - 1, row))
+            const [wx, wz] = gridCellToWorld(clampedCol, clampedRow)
+            addDecoration(placingKind, wx, wz, 0)
+            setPlacingMode(false)
+            setPlacingKind(null)
+          }}
+        >
+          {Array.from({ length: GRID_COLS * GRID_ROWS }, (_, i) => (
+            <div key={i} className="deco-cell" />
+          ))}
+        </div>
+      )}
 
       <div id="float-root" />
     </div>

@@ -356,6 +356,68 @@ body {
   cursor: pointer;
 }
 
+/* P2-3 摆件按钮 */
+.deco-btn {
+  width: 44px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  font-size: 20px;
+  cursor: pointer;
+}
+.deco-btn.active {
+  border: 2px solid #4caf50;
+  background: #f2fff0;
+}
+
+/* P2-3 摆件选择浮层 */
+.deco-picker {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 140px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  z-index: 7;
+  animation: hintFadeIn 280ms ease-out;
+}
+.deco-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.6);
+  font-family: inherit;
+  font-size: 12px;
+  gap: 4px;
+  color: #3a5320;
+  font-weight: 600;
+}
+.deco-card:hover { background: #f8fff0; border-color: #4caf50; }
+.deco-card .emoji { font-size: 28px; }
+
+/* P2-3 网格放置覆盖层 */
+.deco-grid {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 220, 80, 0.12);
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  z-index: 4;
+  cursor: crosshair;
+}
+.deco-cell { border: 1px dashed rgba(255, 200, 60, 0.4); }
+.deco-cell:hover { background: rgba(255, 220, 80, 0.4); }
+
 /* combo-2 浅金、combo-3 亮金、combo-4 橙、combo-5+ 红橙（复用水花动画） */
 .floater.combo-2 { color: #ffd24a; font-size: 24px; text-shadow: 0 0 8px rgba(255,200,0,.6); }
 .floater.combo-3 { color: #ffb43a; font-size: 28px; text-shadow: 0 0 12px rgba(255,160,0,.7); }

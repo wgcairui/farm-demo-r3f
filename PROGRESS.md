@@ -412,3 +412,45 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 3. 作物成熟后用户点击目标地块 → 引导完成 + 写 localStorage
 
 **破零 diff 红线**：未破；`packages/game` 零改动；`package.json` 未新增依赖。
+
+---
+
+### P2-3 实施回顾（装饰摆件系统）
+
+**目标**：玩家在田里放置程序化摆件（风车/稻草人/木桶/木栅栏），存 localStorage，纯视觉装饰。
+
+**关键改动**：
+
+- **新建 `apps/web/src/farm3d/decorations.ts`**：命令式单例，`addDecoration(kind, x, z, rotY)` / `removeDecoration(id)` / `clearDecorations()` / `subscribeDecorations(fn)`；模块顶层从 `farm-demo-decorations-v1` localStorage 自动加载；8×6 网格坐标映射（x∈[-5,5]，z∈[-4,4]）。
+
+- **新建 `apps/web/src/farm3d/deco/Decorations.tsx`**：4 种程序化摆件，均用 toon 卡通材质 + `attachOutlineDeep` inverted-hull outline：
+  - **风车**：圆柱杆 + 4 片叶片，`useFrame` 驱动叶片持续旋转（1.5s/圈）
+  - **稻草人**：竖杆 + 横杆 + 南瓜头（橙色球 + 深色眼/嘴斑块）+ 小草帽
+  - **木桶**：圆柱桶身 + 2 道深色铁箍 + 顶/底盖
+  - **木栅栏**：2 立柱 + 上/下横木 + 中间斜撑
+
+- **`apps/web/src/farm3d/FarmScene.tsx`**：新增 `DecorationItem` 导入；`DecorationsLayer` 订阅 decorations 单例，`map` 渲染所有已保存摆件；挂载在 `<DecoLayer />` 之后。
+
+- **`apps/web/src/App.tsx`**：
+  - 新增 `placingMode` / `placingKind` / `decorationPickerOpen` state
+  - seedbar 增加 🏠 按钮（`.deco-btn`，与 mute/reset 同高 44px）
+  - 点按钮 → 顶部弹出 4 张摆件卡片 picker（`.deco-picker`）
+  - 选卡片 → 进入放置模式，canvas 被 `.deco-grid` 覆盖（8×6 虚线格）
+  - 点击网格格子 → `gridCellToWorld` 映射到世界坐标 → `addDecoration` → 退出放置模式
+  - ESC 键取消放置模式
+  - DECO_EMOJI / DECO_NAME 常量表
+
+- **`apps/web/src/App.css`**：追加 `.deco-btn` / `.deco-picker` / `.deco-card` / `.deco-grid` / `.deco-cell` 样式。
+
+**4 种摆件列表**：
+
+| 名称 | emoji | 材质风格 |
+|------|-------|---------|
+| 风车 | 🗼 | 麦秆色叶片 + 深木杆 + 旋转动画 |
+| 稻草人 | 🎃 | 南瓜头 + 麦秆帽 + 木架 + 十字臂 |
+| 木桶 | 🛢 | 棕色桶身 + 2 道深铁箍 |
+| 木栅栏 | 🪵 | 双立柱 + 上下横木 + 斜撑 |
+
+**放置流程**：🏠 → 选摆件 → 网格覆盖 canvas → 点格放置 → 自动退出模式。
+
+**破零 diff 红线**：未破；`packages/game` 零改动；`package.json` 未新增依赖。
