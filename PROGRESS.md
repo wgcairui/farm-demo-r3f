@@ -186,3 +186,35 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 ## Phase 2 / Phase 3 / Phase 4
 
 按 [docs/PRD.md](docs/PRD.md) §5 推进。Phase 2 启动条件 = D6 第二轮试玩 + D9 冻结（两个均已就绪）。
+
+---
+
+### P1-5 实施回顾（音效设置）
+
+**目标**：全局静音开关 + 音量记忆（localStorage 持久化），调用方零改动。
+
+**关键改动**：
+
+- `apps/web/src/farm3d/sfx.ts`：
+  - 新增模块级 `muted` 标志、`masterGain`（lazy init，AudioContext 首帧触发后创建）、`VOLUME_KEY = 'farm-demo-volume-v1'`
+  - `ac()` 内部创建 `masterGain = ctx.createGain()`，两条 connect 链从 `g.connect(a.destination)` 改为 `g.connect(masterGain).connect(ctx.destination)`
+  - 新增 `loadVolumePref()`（模块初始化时调用，try/catch 兜底隐私模式）、`setMuted(m)`（写 localStorage + 立即更新 masterGain.gain）、`getMuted()`
+  - 所有 playXxx 函数签名不变，调用方零改动
+
+- `apps/web/src/App.tsx`：
+  - 新增 `MUTED_KEY` 常量（复用 VOLUME_KEY 的 'farm-demo-volume-v1'）
+  - 新增 `readMutePref()` 读取 localStorage（与 `readHintsDismissed` 同风格 try/catch）
+  - `useState<boolean>(() => loadVolumePref())` 初始化 muted 状态（由 sfx 模块已加载的偏好驱动）
+  - 新增 `toggleMute()` 回调：调用 `setMuted(!muted)` + setState + 写 localStorage
+  - seedbar 末尾（reset 按钮紧邻左侧）新增 `<button className="mute">{muted ? '🔇' : '🔊'}</button>`
+
+- `apps/web/src/App.css`：
+  - 末尾追加 `.mute` 类（44px 圆角白底按钮，font-size: 20px），与 `.reset` 结构对齐
+
+**文件清单**：
+- `apps/web/src/farm3d/sfx.ts`（模块级状态 + masterGain + 3 个导出函数）
+- `apps/web/src/App.tsx`（import + 2 个常量和函数 + useState + toggleMute 回调 + JSX 按钮）
+- `apps/web/src/App.css`（.mute 一条样式规则）
+- `PROGRESS.md`（本节）
+
+**破零 diff 红线**：未破；`packages/game` 零改动。

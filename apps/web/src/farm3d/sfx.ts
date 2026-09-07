@@ -2,11 +2,45 @@
 // 本模块固化的是"何时响 + 什么感觉"：播种低频噗、收获上升滑音、金币金属叮。
 
 let ctx: AudioContext | null = null
+let masterGain: GainNode | null = null
+let muted = false
+const VOLUME_KEY = 'farm-demo-volume-v1'
 
 function ac(): AudioContext {
   if (!ctx) ctx = new AudioContext()
   if (ctx.state === 'suspended') void ctx.resume()
+  // lazy init master gain（首帧用户交互后才建，避免 autoplay 策略拦截）
+  if (!masterGain) {
+    masterGain = ctx.createGain()
+    masterGain.gain.value = muted ? 0 : 1
+    masterGain.connect(ctx.destination)
+  }
   return ctx
+}
+
+export function loadVolumePref(): boolean {
+  try {
+    const v = localStorage.getItem(VOLUME_KEY)
+    muted = v === 'muted'
+    if (masterGain) masterGain.gain.value = muted ? 0 : 1
+    return muted
+  } catch {
+    return false
+  }
+}
+
+export function setMuted(m: boolean): void {
+  muted = m
+  try {
+    localStorage.setItem(VOLUME_KEY, m ? 'muted' : 'unmuted')
+  } catch {
+    // 隐私模式写不进去：忽略
+  }
+  if (masterGain) masterGain.gain.value = m ? 0 : 1
+}
+
+export function getMuted(): boolean {
+  return muted
 }
 
 interface ToneOpts {
@@ -28,7 +62,7 @@ function tone({ type, f0, f1, dur, gain, delay = 0 }: ToneOpts) {
   if (f1) osc.frequency.exponentialRampToValueAtTime(f1, t0 + dur)
   g.gain.setValueAtTime(gain, t0)
   g.gain.exponentialRampToValueAtTime(0.001, t0 + dur)
-  osc.connect(g).connect(a.destination)
+  osc.connect(g).connect(masterGain!).connect(a.destination)
   osc.start(t0)
   osc.stop(t0 + dur + 0.02)
 }
@@ -57,7 +91,7 @@ function noise({ dur, gain, freq, kind = 'lowpass', delay = 0 }: NoiseOpts) {
   const g = a.createGain()
   g.gain.setValueAtTime(gain, t0)
   g.gain.exponentialRampToValueAtTime(0.001, t0 + dur)
-  src.connect(f).connect(g).connect(a.destination)
+  src.connect(f).connect(g).connect(masterGain!).connect(a.destination)
   src.start(t0)
   src.stop(t0 + dur + 0.02)
 }

@@ -5,6 +5,7 @@ import './App.css'
 import { FERT_COST, setTool } from './farm3d/events'
 import FarmScene from './farm3d/FarmScene'
 import { useFarm } from './farm3d/useFarm'
+import { setMuted, loadVolumePref } from './farm3d/sfx'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -14,6 +15,7 @@ const TRAITS: Record<CropId, string> = {
 
 const HINTS_KEY = 'farm-demo-hints-v1'
 const HINT_DISMISS_EVENT = 'farm:hint-dismiss'
+const MUTED_KEY = 'farm-demo-volume-v1'
 
 /** localStorage 读失败（隐私模式、SSR、塞满）时一律视为「未关闭过」 */
 function readHintsDismissed(): boolean {
@@ -24,10 +26,20 @@ function readHintsDismissed(): boolean {
   }
 }
 
+/** 读静音偏好：与 sfx.ts 的 VOLUME_KEY 保持一致 */
+function readMutePref(): boolean {
+  try {
+    return localStorage.getItem(MUTED_KEY) === 'muted'
+  } catch {
+    return false
+  }
+}
+
 export default function App() {
   const { data, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
   const [fertMode, setFertMode] = useState(false)
   const [hintsDismissed, setHintsDismissed] = useState(() => readHintsDismissed())
+  const [muted, setMutedState] = useState<boolean>(() => loadVolumePref())
 
   useEffect(() => {
     const onDismiss = () => setHintsDismissed(true)
@@ -43,6 +55,17 @@ export default function App() {
       // 隐私模式写不进去：降级为本次会话关闭
     }
     setHintsDismissed(true)
+  }
+
+  const toggleMute = () => {
+    const next = !muted
+    setMuted(next)
+    setMutedState(next)
+    try {
+      localStorage.setItem(MUTED_KEY, next ? 'muted' : 'unmuted')
+    } catch {
+      // 隐私模式写不进去：忽略
+    }
   }
 
   const pickSeed = (id: CropId) => {
@@ -118,6 +141,9 @@ export default function App() {
           <span className="name">施肥</span>
           <span className="trait">加速</span>
           <span className="price">{FERT_COST}🪙 · +50% 速度</span>
+        </button>
+        <button className="mute" onClick={toggleMute}>
+          {muted ? '🔇' : '🔊'}
         </button>
         <button className="reset" onClick={reset}>
           ↺
