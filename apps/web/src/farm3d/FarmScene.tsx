@@ -11,7 +11,7 @@ import { Color, Mesh, Object3D, Vector3 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CROPS, progressOf, type CropId, type PlotState, type SaveData } from '@farm/game'
 import { ASSETS } from './assets'
-import { isClick } from './clickGuard'
+import { isClick, trackPointerDown } from './clickGuard'
 import {
   getActive,
   getBonus,
@@ -74,9 +74,15 @@ function CameraRig() {
     controls.maxPolarAngle = 1.25
     controls.update()
     controlsRef.current = controls
+    // clickGuard 锚点必须在 canvas DOM 元素上：PlotView onClick 给的 e.nativeEvent
+    // 也是这个 DOM 上的 pointerup，clientX/clientY 同坐标空间。D12 回归 bug：
+    // 之前挂在 Canvas props（外层 div）时 React onPointerDown 在 R3F 接管事件源后
+    // 偶发未触发，downX/downY 留为 0，所有点击 distance>8px 误判为拖拽。
+    gl.domElement.addEventListener('pointerdown', trackPointerDown)
     return () => {
       controls.dispose()
       controlsRef.current = null
+      gl.domElement.removeEventListener('pointerdown', trackPointerDown)
     }
   }, [camera, gl])
 
@@ -790,8 +796,11 @@ const FenceRing = memo(function FenceRing() {
 // trees.glb 是 5 棵树的合集，按节点名拆选单棵使用（ASSETS.md 有注）
 // D12 audit fix：NormalTree_1 @ (-0.3, -3.6) 与搬过来的仓库 (-1.5, -2.5) 距离仅 1.3m
 // 会穿模；挪到 (1.0, -3.6) 镜像到 +x 后方空地。
+// D12 第二轮：NormalTree_1 @ (-3.4, -2.7) 树冠从 cottage 山墙后探出，
+// 视觉上像「树在房子里」（cottage footprint 2.2×1.8、中心 (-3.5, 2.5)，
+// 树距 cottage 角 ~0.8m 且在 +z 方向），挪到 (-4.8, -3.0) 后退到 cottage 左后空地。
 const TREES = [
-  { name: 'NormalTree_1', height: 1.7, pos: [-3.4, -2.7], rotY: 0.3 },
+  { name: 'NormalTree_1', height: 1.7, pos: [-4.8, -3.0], rotY: 0.3 },
   { name: 'NormalTree_3', height: 2.2, pos: [3.6, -3.0], rotY: -1.2 },
   { name: 'NormalTree_2', height: 1.9, pos: [4.4, 0.2], rotY: 2.1 },
   { name: 'NormalTree_4', height: 1.5, pos: [-4.3, 1.4], rotY: 1.1 },
