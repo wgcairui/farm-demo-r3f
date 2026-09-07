@@ -15,7 +15,6 @@ const TRAITS: Record<CropId, string> = {
 
 const HINTS_KEY = 'farm-demo-hints-v1'
 const HINT_DISMISS_EVENT = 'farm:hint-dismiss'
-const MUTED_KEY = 'farm-demo-volume-v1'
 
 /** localStorage 读失败（隐私模式、SSR、塞满）时一律视为「未关闭过」 */
 function readHintsDismissed(): boolean {
@@ -26,19 +25,11 @@ function readHintsDismissed(): boolean {
   }
 }
 
-/** 读静音偏好：与 sfx.ts 的 VOLUME_KEY 保持一致 */
-function readMutePref(): boolean {
-  try {
-    return localStorage.getItem(MUTED_KEY) === 'muted'
-  } catch {
-    return false
-  }
-}
-
 export default function App() {
   const { data, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
   const [fertMode, setFertMode] = useState(false)
   const [hintsDismissed, setHintsDismissed] = useState(() => readHintsDismissed())
+  // 静音状态：useState 初始化时调用 sfx.loadVolumePref()（内部读 localStorage 并同步 muted 标志 + masterGain.gain）
   const [muted, setMutedState] = useState<boolean>(() => loadVolumePref())
 
   useEffect(() => {
@@ -57,15 +48,11 @@ export default function App() {
     setHintsDismissed(true)
   }
 
+  // sfx.setMuted 内部已写 localStorage（含 try/catch 兜底），这里只需同步 React state
   const toggleMute = () => {
     const next = !muted
     setMuted(next)
     setMutedState(next)
-    try {
-      localStorage.setItem(MUTED_KEY, next ? 'muted' : 'unmuted')
-    } catch {
-      // 隐私模式写不进去：忽略
-    }
   }
 
   const pickSeed = (id: CropId) => {
@@ -101,11 +88,12 @@ export default function App() {
       <div id="event-banner" />
 
       {/* P1-3 教程提示：让用户发现 R 键重置和收获时的镜头推近
+          P1-4 P0 补强：补一句"空地发光可播种"，让玩家把空地脉动与播种意图关联
           自动关闭由 R 键 / 收获动效派发 CustomEvent 触发
           主动关闭通过 localStorage 永久记忆 */}
       {!hintsDismissed && (
         <div className="hints" role="status">
-          <span>收获时镜头会自动推近；按 <span className="kbd">R</span> 重置视角</span>
+          <span>空地发光可播种；收获时镜头自动推近；按 <span className="kbd">R</span> 重置视角</span>
           <button className="hints-never" onClick={closeHintsForever} type="button">
             不再提示
           </button>
@@ -142,7 +130,13 @@ export default function App() {
           <span className="trait">加速</span>
           <span className="price">{FERT_COST}🪙 · +50% 速度</span>
         </button>
-        <button className="mute" onClick={toggleMute}>
+        <button
+          className="mute"
+          onClick={toggleMute}
+          aria-pressed={muted}
+          aria-label={muted ? '取消静音' : '静音'}
+          type="button"
+        >
           {muted ? '🔇' : '🔊'}
         </button>
         <button className="reset" onClick={reset}>

@@ -62,7 +62,9 @@ function tone({ type, f0, f1, dur, gain, delay = 0 }: ToneOpts) {
   if (f1) osc.frequency.exponentialRampToValueAtTime(f1, t0 + dur)
   g.gain.setValueAtTime(gain, t0)
   g.gain.exponentialRampToValueAtTime(0.001, t0 + dur)
-  osc.connect(g).connect(masterGain!).connect(a.destination)
+  // masterGain 在 ac() 已 connect 到 destination；这里只接 masterGain 即可，不要再接 a.destination
+  // 否则双 bus 叠加 +6dB，音量比预期响
+  osc.connect(g).connect(masterGain!)
   osc.start(t0)
   osc.stop(t0 + dur + 0.02)
 }
@@ -91,7 +93,7 @@ function noise({ dur, gain, freq, kind = 'lowpass', delay = 0 }: NoiseOpts) {
   const g = a.createGain()
   g.gain.setValueAtTime(gain, t0)
   g.gain.exponentialRampToValueAtTime(0.001, t0 + dur)
-  src.connect(f).connect(g).connect(masterGain!).connect(a.destination)
+  src.connect(f).connect(g).connect(masterGain!)
   src.start(t0)
   src.stop(t0 + dur + 0.02)
 }

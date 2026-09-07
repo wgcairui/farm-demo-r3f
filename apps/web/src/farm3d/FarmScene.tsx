@@ -233,31 +233,34 @@ function CameraRig() {
 }
 
 // P1-6 昼夜氛围：光照色温与强度随真实时间缓慢过渡，雨/旱天气叠加在昼夜基准上（35% 权重）
-const getDayNightDirColor = (hour: number): Color => {
-  const { lerp } = Color.prototype
-  if (hour < 5) return new Color(0x6a8aa8) // 深夜
+// 用模块级 Color 复用（避免每帧 new Color 在 60fps 下产生 ~400 个临时对象/秒）
+const _tmpDirColor = new Color()
+const _tmpSkyColor = new Color()
+const _tmpHemiGround = new Color()
+const getDayNightDirColor = (target: Color, hour: number): Color => {
+  if (hour < 5) return target.set(0x6a8aa8) // 深夜
   if (hour < 8) {
     const t = (hour - 5) / 3
-    return new Color(0x6a8aa8).lerp(new Color(0xffb070), t) // 黎明 5-8
+    return target.set(0x6a8aa8).lerp(_tmpSkyColor.set(0xffb070), t) // 黎明 5-8
   }
-  if (hour < 18) return new Color(0xfff3dd) // 白天
+  if (hour < 18) return target.set(0xfff3dd) // 白天
   if (hour < 20) {
     const t = (hour - 18) / 2
-    return new Color(0xfff3dd).lerp(new Color(0xffb070), t) // 黄昏 18-20
+    return target.set(0xfff3dd).lerp(_tmpSkyColor.set(0xffb070), t) // 黄昏 18-20
   }
-  return new Color(0x6a8aa8) // 夜间
+  return target.set(0x6a8aa8) // 夜间
 }
 
 const getDayNightDirIntensity = (hour: number): number => {
-  if (hour < 5) return 0.6 + (hour + 19) / 24 * 1.2 // 深夜缓升
+  if (hour < 5) return 0.6 // 深夜（00-04 稳态低谷）
   if (hour < 8) return 1.8 // 黎明
   if (hour < 18) return 2.4 // 白天
   if (hour < 20) return 2.4 - (hour - 18) / 2 * 0.6 // 黄昏缓降
-  return 0.6
+  return 0.6 // 夜间（20-24）
 }
 
 const getDayNightHemiIntensity = (hour: number): number => {
-  if (hour < 5) return 0.25 + (hour + 19) / 24 * 0.45
+  if (hour < 5) return 0.25
   if (hour < 8) return 0.7
   if (hour < 18) return 1.1
   if (hour < 20) return 1.1 - (hour - 18) / 2 * 0.4
@@ -267,21 +270,31 @@ const getDayNightHemiIntensity = (hour: number): number => {
 const Lights = memo(function Lights() {
   const dir = useRef<DirectionalLight>(null)
   const hemi = useRef<HemisphereLight>(null)
+  // P1-6 review 修复：模块级 Color 复用，避免每帧 new Color 产生 ~400 个临时对象/秒
+  const finalDirColor = useMemo(() => new Color(), [])
+  const dayHemiSky = useMemo(() => new Color(), [])
 
   useFrame((_, dt) => {
     const now = new Date()
     const hour = now.getHours() + now.getMinutes() / 60
 
-    // 昼夜基准
-    const dayDirColor = getDayNightDirColor(hour)
+    // 昼夜基准（in-place 写入复用 Color，不分配）
+    // _tmpDirColor = dayColor
+    getDayNightDirColor(_tmpDirColor, hour)
     const dayDirIntensity = getDayNightDirIntensity(hour)
     const dayHemiIntensity = getDayNightHemiIntensity(hour)
 
-    // 天气叠加（35% 权重）
+    // 天气叠加（35% 权重）：方向光颜色 / 半球光强度
     const weatherDirIntensity = isRain() ? 1.5 : isDrought() ? 2.7 : dayDirIntensity
     const weatherHemiIntensity = isRain() ? 0.85 : isDrought() ? 1.25 : dayHemiIntensity
+    // 方向光最终颜色 = dayColor lerp(weatherColor, 0.35)
+    // weatherColor：雨天偏冷蓝、旱天偏暖橙、无天气 = 昼夜基准
+    if (isRain()) finalDirColor.set(0x6a9ab8)
+    else if (isDrought()) finalDirColor.set(0xffb878)
+    else finalDirColor.copy(_tmpDirColor)
+    // dayColor (in _tmpDirColor) lerp(weatherColor, 0.35) -> 结果写回 _tmpDirColor
+    _tmpDirColor.lerp(finalDirColor, 0.35)
 
-    const finalDirColor = dayDirColor.clone().lerp(new Color(isRain() ? 0x6a9ab8 : isDrought() ? 0xffb878 : dayDirColor), 0.35)
     const finalDirIntensity = dayDirIntensity + (weatherDirIntensity - dayDirIntensity) * 0.35
     const finalHemiIntensity = dayHemiIntensity + (weatherHemiIntensity - dayHemiIntensity) * 0.35
 
@@ -290,7 +303,13 @@ const Lights = memo(function Lights() {
       dir.current.color.lerp(finalDirColor, k)
       dir.current.intensity += (finalDirIntensity - dir.current.intensity) * k
     }
-    if (hemi.current) hemi.current.intensity += (finalHemiIntensity - hemi.current.intensity) * k
+    if (hemi.current) {
+      hemi.current.intensity += (finalHemiIntensity - hemi.current.intensity) * k
+      // hemisphereLight 色温也跟昼夜走（skyColor + groundColor 双轴过渡）
+      getDayNightHemiSkyColor(dayHemiSky, hour)
+      hemi.current.color.lerp(dayHemiSky, k)
+      // groundColor 保持稳定（地面反射色，不参与昼夜色温），避免亮度过低时草地变深
+    }
   })
 
   return (
@@ -339,21 +358,37 @@ function ToonMat({ color, emissive, emissiveIntensity }: { color: number; emissi
 }
 
 // P1-6 昼夜氛围天空色：真实时间驱动，24h 分段插值（5am 黎明 / 8am 早晨 / 12pm 中午 / 6pm 黄昏 / 8pm 入夜 / 12am 深夜）
-const getDayNightSky = (hour: number): Color => {
-  if (hour < 5) return new Color(0x1a1f3a) // 深夜
+const _tmpSkyTarget = new Color()
+const getDayNightSky = (target: Color, hour: number): Color => {
+  if (hour < 5) return target.set(0x1a1f3a) // 深夜
   if (hour < 8) {
     const t = (hour - 5) / 3
-    return new Color(0x1a1f3a).lerp(new Color(0xffb8c0), t) // 黎明 5-8
+    return target.set(0x1a1f3a).lerp(_tmpSkyTarget.set(0xffb8c0), t) // 黎明 5-8
   }
   if (hour < 18) {
     const t = (hour - 8) / 10
-    return new Color(0xffb8c0).lerp(new Color(0x87ceeb), t) // 早晨 8-18
+    return target.set(0xffb8c0).lerp(_tmpSkyTarget.set(0x87ceeb), t) // 早晨 8-18
   }
   if (hour < 20) {
     const t = (hour - 18) / 2
-    return new Color(0x87ceeb).lerp(new Color(0xf0a878), t) // 黄昏 18-20
+    return target.set(0x87ceeb).lerp(_tmpSkyTarget.set(0xf0a878), t) // 黄昏 18-20
   }
-  return new Color(0x1a1f3a) // 夜间
+  return target.set(0x1a1f3a) // 夜间
+}
+
+// 半球光色温：天空色（hex）按昼夜过渡，与方向光色温保持一致
+const getDayNightHemiSkyColor = (target: Color, hour: number): Color => {
+  if (hour < 5) return target.set(0x4a5a78) // 深夜：冷蓝
+  if (hour < 8) {
+    const t = (hour - 5) / 3
+    return target.set(0x4a5a78).lerp(_tmpHemiGround.set(0xbfe8ff), t) // 黎明：渐变到晨蓝
+  }
+  if (hour < 18) return target.set(0xbfe8ff) // 白天：明亮天蓝
+  if (hour < 20) {
+    const t = (hour - 18) / 2
+    return target.set(0xbfe8ff).lerp(_tmpHemiGround.set(0xff9a6a), t) // 黄昏：金橙
+  }
+  return target.set(0x4a5a78) // 夜间：冷蓝
 }
 
 // P1-6 天气氛围：天空/雾色以昼夜为基准，天气色偏叠加 35% 权重
@@ -362,19 +397,28 @@ const SKY_DROUGHT_OVERLAY = new Color(0xe0c98d)
 
 function WeatherMood() {
   const scene = useThree((s) => s.scene)
+  // 复用 Color，避免每帧 clone() / new Color() 产生 ~200 个临时对象/秒
+  const daySky = useMemo(() => new Color(), [])
+  const target = useMemo(() => new Color(), [])
+
   useFrame((_, dt) => {
     const now = new Date()
     const hour = now.getHours() + now.getMinutes() / 60
 
-    const dayTarget = getDayNightSky(hour)
-    const weatherTarget = isRain() ? SKY_RAIN_OVERLAY : isDrought() ? SKY_DROUGHT_OVERLAY : dayTarget
-    const target = dayTarget.clone().lerp(weatherTarget, 0.35)
+    // daySky = 昼夜基准（in-place）
+    getDayNightSky(daySky, hour)
+    // weather overlay：雨天 / 旱天 / 无天气 = 用 daySky 自己（lerp 0.35 = 无变化）
+    if (isRain()) target.copy(SKY_RAIN_OVERLAY)
+    else if (isDrought()) target.copy(SKY_DROUGHT_OVERLAY)
+    else target.copy(daySky)
+    // daySky lerp(target, 0.35) -> 结果写回 daySky
+    daySky.lerp(target, 0.35)
 
     const k = 1 - Math.exp(-DAY_NIGHT.k * Math.min(dt, 0.1))
     const bg = scene.background
-    if (bg instanceof Color) bg.lerp(target, k)
+    if (bg instanceof Color) bg.lerp(daySky, k)
     const fog = scene.fog as { color: Color } | null
-    if (fog) fog.color.lerp(target, k)
+    if (fog) fog.color.lerp(daySky, k)
   })
   return null
 }

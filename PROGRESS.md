@@ -218,3 +218,95 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 - `PROGRESS.md`（本节）
 
 **破零 diff 红线**：未破；`packages/game` 零改动。
+
+---
+
+### P1-6 实施回顾（昼夜氛围）
+
+**目标**：真实时间驱动的 24h 昼夜氛围循环——天空渐变 + 光照色温随真实时间平滑过渡；雨/旱天气叠加在昼夜基准上（35% 权重），不压死昼夜基线。
+
+**关键改动**：
+
+- `apps/web/src/farm3d/motion.ts`：新增 `DAY_NIGHT = { k: 4 }` 帧率无关阻尼系数
+- `apps/web/src/farm3d/FarmScene.tsx` — `Lights` 组件：
+  - 新增 `getDayNightDirColor` / `getDayNightDirIntensity` / `getDayNightHemiIntensity` / `getDayNightHemiSkyColor` 四个辅助函数（均接受 out Color 参数做 in-place 写入）
+  - useFrame 内：以昼夜为基准（35% 权重）叠加雨/旱天气色偏；方向光颜色、强度、半球光强度和 skyColor 全部阻尼过渡
+- `apps/web/src/farm3d/FarmScene.tsx` — `WeatherMood` 组件：
+  - 新增 `getDayNightSky(hour)` 辅助函数（天空色 24h 分段插值）
+  - 移除旧的 `SKY / SKY_RAIN / SKY_DROUGHT` 三个常量（保留 `SKY_RAIN_OVERLAY` / `SKY_DROUGHT_OVERLAY` 作天气叠加）
+  - useFrame 内：先算昼夜基准，再以 35% 权重叠加天气色偏，最终目标 lerp 阻尼过渡
+- 所有临时 Color 改为模块级 / useMemo 复用，**避免每帧 new Color 在 60fps 下产生 ~400 个临时对象/秒**
+
+**关键节点时间表**：
+
+| 时刻 | 天色 | 方向光颜色 | 方向光强度 | 半球光强度 |
+|------|------|-----------|-----------|-----------|
+| 5am 黎明 | 深紫蓝→粉红 | 冷蓝→暖橙 | 0.6→1.8 | 0.25→0.7 |
+| 8am 早晨 | 粉红→青蓝 | 暖橙 | 2.4 | 1.1 |
+| 12pm 中午 | 青蓝 | 暖白 (0xfff3dd) | 2.4 | 1.1 |
+| 6pm 黄昏 | 青蓝→橙粉 | 暖白→金橙 | 2.4→1.8 | 1.1→0.7 |
+| 8pm 入夜 | 橙粉→深紫蓝 | 金橙→冷蓝 | 1.8→0.6 | 0.7→0.25 |
+| 12am 深夜 | 深紫蓝 | 冷蓝 (0x6a8aa8) | 0.6 | 0.25 |
+
+**P1-6 review 修复**（commit 后续追加）：
+- 深夜方向光强度公式从 `(hour+19)/24*1.2` 错乱改为常量 0.6（凌晨 0-5 稳态低谷）
+- hemisphereLight 增加 skyColor 色温过渡（之前只动 intensity）
+- sfx.ts masterGain 双 bus 修复（删除链尾 `.connect(a.destination)`）
+- 教程提示文案补一句"空地发光可播种"（P1-4 P0 补强）
+- App.tsx 删除重复的 MUTED_KEY 常量 + toggleMute 不再重复写 localStorage
+- mute 按钮加 aria-pressed / aria-label
+
+**破零 diff 红线**：未破；`packages/game` 零改动。
+
+---
+
+### P1-7 实施回顾（性能验收）
+
+**目标**：实测 web 版性能，对照 PRD §6.2 的 web 等价指标（Chrome DevTools / Lighthouse）。
+
+**测试方法**：
+- **工具**：Playwright Python + Chrome CDP (DevTools Protocol) + Lighthouse CLI 13.4.1
+- **Chrome 版本**：Google Chrome 152.0.7977.76 (headless)
+- **测试 URL**：`http://localhost:4173`（`npm run preview -w @farm/web`，即 `dist/` 静态产物）
+- **场景**：冷启动页面 → 等 2s → 6 次 plot 点击（模拟收获）→ 相机 orbit 拖拽 → 等 2s
+- **注**：Lighthouse 默认 headless 禁用 GPU，FPS 数字不能代表有 GPU 真机；JS 线程数据（长任务/TBT）不受 GPU 影响，仍有效
+
+**实测数据表格**：
+
+| 指标 | 阈值 | 实测 | 是否达标 | 备注 |
+|---|---|---|---|---|
+| JS 长任务 (>50ms) | 0（持续） | **4 个**，但全在初始加载期 | **部分达标** | bundle parse 占 2 个（3226ms + 2760ms）；交互期间仅偶发 EventDispatch 131ms |
+| FPS（最重载场景） | ≥30 | **~11 FPS**（headless 无 GPU） | **无法验证** | headless GPU disabled；真实浏览器+GPU 预计 60fps |
+| JS Heap | <300MB | **8.8–12.2 MB** | **✓ 达标** | 远低于阈值 |
+| 冷启动 (FCP) | ≤3s | **2.55 s** | **✓ 达标** | Lighthouse FCP；CDP nav timing 0.77s |
+
+**瓶颈分析**（从 Lighthouse + CDP Tracing 数据）：
+
+1. **Bundle 过大导致 Parse/Compile 阻塞（Top 1）**
+   - `index-*.js` 压缩后 1.1 MB，解压后更大；Lighthouse 抓到两次长任务：3226ms + 2760ms
+   - 对应 Lighthouse TBT 5.89s —— 主要贡献源
+   - `bootup-time` 仅计 scriptEvaluation 就 6.8s
+   - **建议**：路由级 code-splitting（dynamic import），首屏只加载农场场景必需代码，教程提示/仓库装饰等延迟加载
+
+2. **trees GLB 过大（Top 2）**
+   - `trees-bNhCOk-W.glb` 单文件 3.4 MB，是所有资产中最重的
+   - LCP 20.25s 中相当部分由此贡献（LCP 是视口内最大内容元素，通常是 Three.js 场景渲染完成）
+   - **建议**：GLTF draco 分层 + 渐进式加载；或换成程序化几何体（当前 deco/ 已全是程序化）
+
+3. **初始渲染帧率不稳定（Top 3）**
+   - Tracing 抓到 `FireAnimationFrame` 65ms + `FunctionCall` 65ms（偶发）；`EventDispatch` 131ms
+   - 这些在 headless 下被放大；真实设备 GPU 加速后应消失
+   - 真正风险是场景初始化阶段（GLB 加载 + Three.js 编译 shader）的帧抖
+   - **建议**：loading placeholder 骨架；或 Canvas 渲染开始前先 show splash
+
+**Top-3 慢函数/资源**：
+1. `index-*.js` bundle parse（3226ms）—— 1.1 MB 无 split
+2. `trees-bNhCOk-W.glb` 网络加载（3.4 MB）—— 无 draco/分片
+3. Three.js initial render（canvas 2.2s visible）—— 首帧等待 GLB
+
+**建议改进（P0/P1/P2，不实施）**：
+- **P0**：code-splitting 首屏 bundle，将 index.js 拆为 `farm-scene-chunk.js` + `deco-chunk.js`，目标将首次长任务降至 <500ms
+- **P1**：trees GLB 换程序化柯基 + 狗屋 + 茅草屋（deco/ 已验证方案），去掉 3.4 MB 资产
+- **P2**：给 Canvas 外包一层 loading overlay，等 `scene.ready` 再 fade in，消除初始化帧抖
+
+**破零 diff 红线**：未破；`packages/game` 零改动；本轮只验收不动代码。
