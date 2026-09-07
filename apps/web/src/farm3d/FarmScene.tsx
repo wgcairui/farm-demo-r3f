@@ -974,6 +974,7 @@ function FloaterBridge() {
           (-v.y * 0.5 + 0.5) * size.height,
           f.text,
           f.hero === true,
+          f.combo,
         )
       }
     }

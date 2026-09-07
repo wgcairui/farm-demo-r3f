@@ -6,6 +6,7 @@ import { FERT_COST, setTool } from './farm3d/events'
 import FarmScene from './farm3d/FarmScene'
 import { useFarm } from './farm3d/useFarm'
 import { setMuted, loadVolumePref } from './farm3d/sfx'
+import { subscribeCombo } from './farm3d/combo'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -31,11 +32,22 @@ export default function App() {
   const [hintsDismissed, setHintsDismissed] = useState(() => readHintsDismissed())
   // 静音状态：useState 初始化时调用 sfx.loadVolumePref()（内部读 localStorage 并同步 muted 标志 + masterGain.gain）
   const [muted, setMutedState] = useState<boolean>(() => loadVolumePref())
+  const [comboFlash, setComboFlash] = useState(false)
 
   useEffect(() => {
     const onDismiss = () => setHintsDismissed(true)
     window.addEventListener(HINT_DISMISS_EVENT, onDismiss)
     return () => window.removeEventListener(HINT_DISMISS_EVENT, onDismiss)
+  }, [])
+
+  // combo >= 4 时触发 150ms 全屏闪光
+  useEffect(() => {
+    return subscribeCombo(({ count }) => {
+      if (count >= 4) {
+        setComboFlash(true)
+        window.setTimeout(() => setComboFlash(false), 150)
+      }
+    })
   }, [])
 
   const closeHintsOnce = () => setHintsDismissed(true)
@@ -86,6 +98,9 @@ export default function App() {
 
       {/* 事件横幅：events.ts 命令式更新（textContent/className），React 不参与 */}
       <div id="event-banner" />
+
+      {/* combo >= 4 时全屏金色 vignette 闪光 */}
+      <div id="combo-flash" className={comboFlash ? 'show' : ''} />
 
       {/* P1-3 教程提示：让用户发现 R 键重置和收获时的镜头推近
           P1-4 P0 补强：补一句"空地发光可播种"，让玩家把空地脉动与播种意图关联

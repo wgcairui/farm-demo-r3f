@@ -23,11 +23,26 @@ import { clearFloaters, queueFloater } from './floaters'
 import { plotPosition } from './layout'
 import { notifyHarvestCamera } from './cameraMotion'
 import { playCoin, playFertilize, playHarvest, playPlant, playSplash, playSquash } from './sfx'
+import { recordHarvest, resetCombo } from './combo'
+import {
+  finishTutorial,
+  getTutorialState,
+  nextStep,
+  subscribeTutorial,
+  type TutorialState,
+} from './tutorial'
 
 export function useFarm() {
   const [data, setData] = useState<SaveData>(() => load())
+  const [tutorial, setTutorial] = useState<TutorialState>(() => getTutorialState())
   const dataRef = useRef(data)
   dataRef.current = data
+
+  // 订阅 tutorial 单例，tutorial 状态变化时同步到 React state
+  useEffect(() => {
+    const unsub = subscribeTutorial(setTutorial)
+    return unsub
+  }, [])
 
   useEffect(() => {
     save(data)
@@ -48,6 +63,13 @@ export function useFarm() {
         }
         const def = CROPS[snap.selected]
         if (snap.coins < def.seedPrice) return
+
+        // P2-1 教程播步触发：step=2 时点击目标地块 → 进入 step=3
+        const tut = getTutorialState()
+        if (tut.step === 2 && i === tut.targetPlot) {
+          nextStep(i)
+        }
+
         setData((d) => {
           if (d.plots[i].crop !== null || d.coins < CROPS[d.selected].seedPrice) return d
           const plots = d.plots.slice()
@@ -58,6 +80,7 @@ export function useFarm() {
         playPlant()
         onPlant(i)
         queueFloater(px, 0.55, pz, `-${def.seedPrice}`)
+        resetCombo()
         return
       }
 
@@ -68,6 +91,7 @@ export function useFarm() {
         if (tryWater(i, p.crop!)) {
           playSplash()
           queueFloater(px, 0.5, pz, '💧')
+          resetCombo()
           return
         }
         const fert = tryFertilize(i, snap.coins)
@@ -75,13 +99,24 @@ export function useFarm() {
           setData((d) => (d.coins < FERT_COST ? d : { ...d, coins: d.coins - FERT_COST }))
           playFertilize()
           queueFloater(px, 0.5, pz, '🌱 +50%')
+          resetCombo()
           return
         }
-        if (fert === 'poor') queueFloater(px, 0.5, pz, '🪙 不够')
+        if (fert === 'poor') {
+          queueFloater(px, 0.5, pz, '🪙 不够')
+          resetCombo()
+          return
+        }
         return
       }
 
       case 'mature': {
+        // P2-1 教程收获触发：step=3 时点击目标地块 → 完成引导
+        const tut = getTutorialState()
+        if (tut.step === 3 && i === tut.targetPlot) {
+          finishTutorial()
+        }
+
         const def = CROPS[p.crop!]
         const gain = isDamaged(i) ? Math.floor(def.sellPrice / 2) : def.sellPrice
         setData((d) => {
@@ -91,6 +126,7 @@ export function useFarm() {
           plots[i] = { crop: null, plantedAt: null, state: 'withered', witheredAt: at }
           return { ...d, plots, coins: d.coins + gain }
         })
+        const { count: comboCount } = recordHarvest(at)
         clearFloaters()
         triggerShake(isDamaged(i) ? 'soft' : 'normal')
         spawnShockwave(px, pz)
@@ -98,7 +134,7 @@ export function useFarm() {
         playHarvest()
         window.setTimeout(playCoin, 90)
         spawnCoinBurst(px, 0.3, pz)
-        queueFloater(px, 0.85, pz, `+${gain}${isDamaged(i) ? ' 🐛' : ''}`, { hero: true })
+        queueFloater(px, 0.85, pz, `+${gain}${isDamaged(i) ? ' 🐛' : ''}`, { hero: true, combo: comboCount >= 2 ? comboCount : undefined })
         notifyHarvestCamera(px, pz)
         onHarvest(i)
         return
@@ -113,6 +149,7 @@ export function useFarm() {
           return { ...d, plots }
         })
         queueFloater(px, 0.45, pz, '🍂 已清理')
+        resetCombo()
         return
       }
     }
@@ -127,9 +164,15 @@ export function useFarm() {
     playSquash()
     window.setTimeout(playCoin, 80)
     queueFloater(px, 0.55, pz, '✓ +2')
+    resetCombo()
   }, [])
 
-  const select = useCallback((id: CropId) => setData((d) => ({ ...d, selected: id })), [])
+  const select = useCallback((id: CropId) => {
+    // P2-1 教程：选任意种子 → step=1→2
+    const tut = getTutorialState()
+    if (tut.step === 1) nextStep()
+    setData((d) => ({ ...d, selected: id }))
+  }, [])
 
   /** D7：PlotStateTicker 回调，用 withered 自动恢复后的新 plots 数组替换 */
   const tickPlots = useCallback((plots: SaveData['plots']) => {
@@ -141,5 +184,5 @@ export function useFarm() {
     location.reload()
   }, [])
 
-  return { data, handlePlot, handlePest, select, reset, tickPlots }
+  return { data, tutorial, handlePlot, handlePest, select, reset, tickPlots }
 }

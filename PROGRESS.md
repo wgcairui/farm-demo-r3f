@@ -355,3 +355,33 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 - trees-*.glb 3.4 MB 无拆（属于 GLB 资产，不计入 JS chunk）✓
 
 **破零 diff 红线**：未破；`packages/game` 零改动；`package.json` 未新增依赖。
+
+---
+
+### P2-4 实施回顾（收获连击 combo）
+
+**目标**：2.5s 窗口内连续触发 N 次收获（任意地块）→ 显示 combo 等级，颜色递增；combo >= 4 时整屏短促闪光（150ms 金色 vignette）。
+
+**关键改动**：
+
+- **新建 `apps/web/src/farm3d/combo.ts`**：模块级单例（仿 events.ts 风格），维护 `comboCount / lastHarvestAt / sequence`，提供 `recordHarvest()`、`resetCombo()`、`subscribeCombo()` 三个导出函数
+- **`apps/web/src/farm3d/useFarm.ts`**：mature 分支调用 `recordHarvest(at)`，非收获交互（empty/sown/sprout/growing/withered/handlePest）全部调用 `resetCombo()`
+- **`apps/web/src/farm3d/floaters.ts`**：`FloaterSpawn` 接口加 `combo?: number`；`mountFloaterDom` 在 `combo >= 2` 时附加 `combo-${Math.min(combo, 5)}` CSS class
+- **`apps/web/src/App.css`**：追加 `.floater.combo-2/3/4/5` 四级颜色样式；追加 `#combo-flash` 全屏 vignette 闪光
+- **`apps/web/src/App.tsx`**：新增 `comboFlash` state；`useEffect` 订阅 combo，`count >= 4` 时触发 150ms 闪光；渲染 `#combo-flash` div
+- **`apps/web/src/farm3d/FarmScene.tsx`**：`takeFloaters()` 循环中 `mountFloaterDom` 调用补 `f.combo` 参数
+
+**combo 等级颜色表**：
+
+| combo | 颜色 | 字号 | text-shadow |
+|-------|------|------|-------------|
+| ×2 | #ffd24a 浅金 | 24px | 0 0 8px rgba(255,200,0,.6) |
+| ×3 | #ffb43a 亮金 | 28px | 0 0 12px rgba(255,160,0,.7) |
+| ×4 | #ff7a30 橙色 | 32px | 0 0 16px rgba(255,80,0,.8) |
+| ×5+ | #ff4030 红橙 | 36px | 0 0 20px rgba(255,40,0,.9) |
+
+**重置规则**：
+- 2.5s 窗口内无新收获 → 下次收获重新从 ×1 开始
+- 任何非收获动作（播种/施肥/浇水/拍虫/清理 withered）立即打断 combo
+
+**破零 diff 红线**：未破；`packages/game` 零改动；`package.json` 未新增依赖。

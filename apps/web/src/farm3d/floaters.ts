@@ -8,12 +8,14 @@ export interface FloaterSpawn {
   text: string
   /** 主菜级浮字：收获时的大字+金光+轻微果冻震；普通 -N/+2 走默认 */
   hero?: boolean
+  /** combo >= 2 时显示连击等级（影响颜色与大小） */
+  combo?: number
 }
 
 const pending: FloaterSpawn[] = []
 
-export function queueFloater(x: number, y: number, z: number, text: string, opts?: { hero?: boolean }) {
-  pending.push({ x, y, z, text, hero: opts?.hero })
+export function queueFloater(x: number, y: number, z: number, text: string, opts?: { hero?: boolean; combo?: number }) {
+  pending.push({ x, y, z, text, hero: opts?.hero, combo: opts?.combo })
 }
 
 export function takeFloaters(): FloaterSpawn[] {
@@ -25,11 +27,14 @@ export function clearFloaters(): void {
   pending.length = 0
 }
 
-export function mountFloaterDom(sx: number, sy: number, text: string, hero = false) {
+export function mountFloaterDom(sx: number, sy: number, text: string, hero = false, combo?: number) {
   const root = document.getElementById('float-root')
   if (!root) return
   const el = document.createElement('span')
-  el.className = hero ? 'floater hero' : 'floater'
+  let cls = 'floater'
+  if (hero) cls += ' hero'
+  if (combo !== undefined && combo >= 2) cls += ` combo-${Math.min(combo, 5)}`
+  el.className = cls
   el.textContent = text
   el.style.left = `${sx}px`
   el.style.top = `${sy}px`
