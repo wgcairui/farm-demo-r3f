@@ -6,6 +6,7 @@ import type {
   HemisphereLight,
   InstancedMesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
 } from 'three'
 import { Color, Mesh, Object3D, PlaneGeometry, Vector3 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -464,12 +465,14 @@ function PlotView({ index, crop, plantedAt, state, hint, onPlot, make }: PlotVie
   useFrame(() => {
     const now = performance.now()
 
-    // 空地提示呼吸（D5）：withered 不显示提示环
+    // 空地提示呼吸（D5）：withered 不显示提示环；P2-1 补 emissive 微光
     if (hintRef.current) {
       const k = Math.sin((now / 1000) * Math.PI * 1.2)
       hintRef.current.scale.setScalar(1 + 0.06 * k)
       const ring = hintRef.current.children[0] as Mesh
-      ;(ring.material as MeshBasicMaterial).opacity = 0.28 + 0.18 * k
+      const mat = ring.material as MeshStandardMaterial
+      mat.emissiveIntensity = 0.25 + 0.25 * k // 0..0.5 呼吸
+      mat.opacity = 0.28 + 0.18 * k
     }
 
     // 生长连续插值：Date.now 对齐 plantedAt 的时间基（帧级平滑，不等重渲染）；
@@ -543,7 +546,7 @@ function PlotView({ index, crop, plantedAt, state, hint, onPlot, make }: PlotVie
         <group ref={hintRef} position={[0, 0.07, 0]} rotation-x={-Math.PI / 2}>
           <mesh>
             <ringGeometry args={[0.26, 0.33, 32]} />
-            <meshBasicMaterial color={0xfff2b0} transparent opacity={0.3} depthWrite={false} />
+            <meshStandardMaterial color={0xfff2b0} emissive={0xfff2b0} emissiveIntensity={0.35} transparent opacity={0.3} depthWrite={false} metalness={0} roughness={1} />
           </mesh>
         </group>
       )}

@@ -310,3 +310,32 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 - **P2**：给 Canvas 外包一层 loading overlay，等 `scene.ready` 再 fade in，消除初始化帧抖
 
 **破零 diff 红线**：未破；`packages/game` 零改动；本轮只验收不动代码。
+
+---
+
+### P2-2 实施回顾（bundle split）
+
+**目标**：解决 P1-7 验收的 1.1MB 单 chunk 长任务（3226ms parse）。
+
+**关键改动**：
+- 仅 `apps/web/vite.config.ts`，加 `build.rollupOptions.output.manualChunks` 函数
+- 三路分流：`react` → `react-vendor`（React + ReactDOM + scheduler）、`three/@react-three` → `three`（Three.js + R3F + Drei）、其余 → `index`（App + HUD + FarmScene + 所有业务组件）
+
+**拆分前后对比**：
+
+| Chunk | 文件名 | 大小 | gzip |
+|---|---|---|---|
+| —（拆分前） | `index-*.js` | 1,175.57 KB | — |
+| main | `index-*.js` | **40.74 KB** | 14.15 KB |
+| react-vendor | `react-vendor-*.js` | **193.77 KB** | 61.02 KB |
+| three | `three-*.js` | **941.08 KB** | 249.57 KB |
+| runtime | `rolldown-runtime-*.js` | 0.71 KB | 0.42 KB |
+
+首屏 parse 目标：从 3226ms 降至 <800ms 量级（40KB main chunk 远低于 200KB 阈值，浏览器主线程阻塞大幅缩短）。
+
+**验收**：
+- main chunk 40.74 KB < 200 KB ✓
+- 拆出 3 个业务 chunk（main + react-vendor + three）✓
+- trees-*.glb 3.4 MB 无拆（属于 GLB 资产，不计入 JS chunk）✓
+
+**破零 diff 红线**：未破；`packages/game` 零改动；`package.json` 未新增依赖。
