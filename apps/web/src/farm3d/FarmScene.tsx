@@ -42,6 +42,7 @@ import {
   updateCoins,
 } from './effects'
 import { DecoLayer } from './deco'
+import Tree from './deco/Tree'
 import { mountFloaterDom, queueFloater, takeFloaters } from './floaters'
 import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
@@ -1064,44 +1065,6 @@ const FenceRing = memo(function FenceRing() {
   )
 })
 
-// trees.glb 是 5 棵树的合集，按节点名拆选单棵使用（ASSETS.md 有注）
-// D12 audit fix：NormalTree_1 @ (-0.3, -3.6) 与搬过来的仓库 (-1.5, -2.5) 距离仅 1.3m
-// 会穿模；挪到 (1.0, -3.6) 镜像到 +x 后方空地。
-// D12 第二轮：NormalTree_1 @ (-3.4, -2.7) 树冠从 cottage 山墙后探出，
-// 视觉上像「树在房子里」（cottage footprint 2.2×1.8、中心 (-3.5, 2.5)，
-// 树距 cottage 角 ~0.8m 且在 +z 方向），挪到 (-4.8, -3.0) 后退到 cottage 左后空地。
-const TREES = [
-  { name: 'NormalTree_1', height: 1.7, pos: [-4.8, -3.0], rotY: 0.3 },
-  { name: 'NormalTree_3', height: 2.2, pos: [3.6, -3.0], rotY: -1.2 },
-  { name: 'NormalTree_2', height: 1.9, pos: [4.4, 0.2], rotY: 2.1 },
-  { name: 'NormalTree_4', height: 1.5, pos: [-4.3, 1.4], rotY: 1.1 },
-  { name: 'NormalTree_1', height: 1.3, pos: [1.0, -3.6], rotY: 0.9 },
-] as const
-
-const Trees = memo(function Trees() {
-  const treesGltf = useGLTF(ASSETS.trees)
-
-  const models = useMemo(
-    () =>
-      TREES.map((t) => ({
-        obj: normalized(treesGltf.scene.getObjectByName(t.name)!, { height: t.height }),
-        pos: t.pos,
-        rotY: t.rotY,
-      })),
-    [treesGltf],
-  )
-
-  return (
-    <>
-      {models.map((m, i) => (
-        <group key={i} position={[m.pos[0], 0, m.pos[1]]} rotation-y={m.rotY}>
-          <primitive object={m.obj} />
-        </group>
-      ))}
-    </>
-  )
-})
-
 export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSceneProps) {
   const dirtGltf = useGLTF(ASSETS.dirt)
   const carrotGltf = useGLTF(ASSETS.carrot)
@@ -1126,7 +1089,11 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
         <Ground />
         <Farm data={data} onPlot={onPlot} make={make} />
         <FenceRing />
-        <Trees />
+        <Tree kind="NormalTree_1" height={1.7} position={[-4.8, -3.0]} rotationY={0.3} />
+        <Tree kind="NormalTree_3" height={2.2} position={[3.6, -3.0]} rotationY={-1.2} />
+        <Tree kind="NormalTree_2" height={1.9} position={[4.4, 0.2]} rotationY={2.1} />
+        <Tree kind="NormalTree_4" height={1.5} position={[-4.3, 1.4]} rotationY={1.1} />
+        <Tree kind="NormalTree_1" height={1.3} position={[1.0, -3.6]} rotationY={0.9} />
         <DecoLayer />
         <PestBug onPest={onPest} />
         <RainParticles />

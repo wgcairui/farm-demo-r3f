@@ -5,7 +5,6 @@ import carrotUrl from '@farm/assets/models/carrot.glb?url'
 import cornUrl from '@farm/assets/models/corn.glb?url'
 import dirtUrl from '@farm/assets/models/farm-dirt.glb?url'
 import fenceUrl from '@farm/assets/models/fence.glb?url'
-import treesUrl from '@farm/assets/models/trees.glb?url'
 import dogUrl from '@farm/assets/models/dog.glb?url'
 import cottageUrl from '@farm/assets/models/cottage.glb?url'
 
@@ -14,7 +13,6 @@ export const ASSETS = {
   corn: cornUrl,
   dirt: dirtUrl,
   fence: fenceUrl,
-  trees: treesUrl,
   dog: dogUrl,
   cottage: cottageUrl,
 } as const
