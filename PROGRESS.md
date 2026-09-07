@@ -313,6 +313,22 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 
 ---
 
+### P2-1 实施回顾（空地提示加 emissive 微光）
+
+**目标**：补齐 PRD P1-4 描述里"脉动/微光"的"微光"维度——hint 环在浅金黄底色上叠加暖白微光，呼吸幅度 ±50%。
+
+**关键改动**（仅 `apps/web/src/farm3d/FarmScene.tsx`）：
+
+1. **第 8 行 import**：新增 `MeshStandardMaterial` 到 type import 列表
+2. **第 546 行 JSX material**：将 `meshBasicMaterial` 替换为 `meshStandardMaterial`，新增 `emissive={0xfff2b0}`、`emissiveIntensity={0.35}`、`metalness={0}`、`roughness={1}`（metalness=0 保持低模卡通风，与 GLB 加载规范一致）
+3. **第 467-475 行 useFrame**：注释补 "P2-1"；ring.material 断言从 `MeshBasicMaterial` 改为 `MeshStandardMaterial`；追加 `mat.emissiveIntensity = 0.25 + 0.25 * k`（0..0.5 呼吸）；`mat.opacity` 改为直接赋值
+
+**效果描述**：hint 环在浅金黄底色 (0xfff2b0) 上叠加暖白 emissive，flat Canvas 下不会过曝；呼吸周期与 scale/opacity 同步（约 1.67s 一周期），微光强度 ±50%（0.25–0.50），与 scale 1±6%、opacity 0.28±0.18 构成"光感+形态"双维度脉动。
+
+**破零 diff 红线**：未破；`packages/game` 零改动。
+
+---
+
 ### P2-2 实施回顾（bundle split）
 
 **目标**：解决 P1-7 验收的 1.1MB 单 chunk 长任务（3226ms parse）。
