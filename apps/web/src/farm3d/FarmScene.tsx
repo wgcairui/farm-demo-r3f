@@ -61,6 +61,8 @@ export interface FarmSceneProps {
   onPest: () => void
   /** D7：withered 自动恢复推动，每次 tickPlotStates 产生新数组时回调 */
   onTickPlots: (plots: SaveData['plots']) => void
+  /** P2-2：当前地块组索引，0=原 6 块，1=新 6 块 */
+  currentGroupIdx?: number
 }
 
 // D3 环绕相机。边界 clamp：距离 3.2~14、极角 0.3~1.25 rad（不钻地、不翻顶）、禁平移。
@@ -437,6 +439,7 @@ interface MakeMap {
 
 interface PlotViewProps {
   index: number
+  groupIdx: number
   crop: CropId | null
   plantedAt: number | null
   state: PlotState
@@ -446,8 +449,8 @@ interface PlotViewProps {
   make: MakeMap
 }
 
-function PlotView({ index, crop, plantedAt, state, hint, onPlot, make }: PlotViewProps) {
-  const [x, z] = plotPosition(index)
+function PlotView({ index, groupIdx, crop, plantedAt, state, hint, onPlot, make }: PlotViewProps) {
+  const [x, z] = plotPosition(index, groupIdx)
   const dirt = useMemo(() => make.dirt(), [make])
   // withered 状态不显示作物模型（即使 crop 字段还有值）
   const plant = useMemo(() => (crop && state !== 'withered' ? make[crop]() : null), [crop, state, make])
@@ -562,7 +565,7 @@ function PlotView({ index, crop, plantedAt, state, hint, onPlot, make }: PlotVie
       )}
       {/* D6：倒计时浮字（QQ 农场风格：作物头顶小字，< 1 分钟换色+图标）+ 状态环 */}
       {crop && plantedAt !== null && state !== 'withered' && (
-        <CountdownFloater index={index} crop={crop} plantedAt={plantedAt} />
+        <CountdownFloater index={index} groupIdx={groupIdx} crop={crop} plantedAt={plantedAt} />
       )}
       <StatusRing index={index} crop={crop} state={state} />
     </group>
@@ -573,7 +576,8 @@ function Farm({
   data,
   onPlot,
   make,
-}: Pick<FarmSceneProps, 'data' | 'onPlot'> & { make: MakeMap }) {
+  groupIdx,
+}: Pick<FarmSceneProps, 'data' | 'onPlot'> & { make: MakeMap; groupIdx: number }) {
   const afford = data.coins >= CROPS[data.selected].seedPrice
   return (
     <>
@@ -581,6 +585,7 @@ function Farm({
         <PlotView
           key={i}
           index={i}
+          groupIdx={groupIdx}
           crop={p.crop}
           plantedAt={p.plantedAt}
           state={p.state}
@@ -601,15 +606,17 @@ function Farm({
 
 function CountdownFloater({
   index,
+  groupIdx,
   crop,
   plantedAt,
 }: {
   index: number
+  groupIdx: number
   crop: CropId
   plantedAt: number
 }) {
   const lastShownAtRef = useRef(0)
-  const [x, z] = plotPosition(index)
+  const [x, z] = plotPosition(index, groupIdx)
   const y = crop === 'corn' ? 0.95 : 0.62
 
   useFrame(() => {
@@ -683,7 +690,7 @@ function StatusRing({ index, crop, state }: { index: number; crop: CropId | null
 
 // —— D6 害虫：在目标作物头顶盘旋的小虫 + 红色警示环（越接近超时闪得越急）——
 
-function PestBug({ onPest }: { onPest: () => void }) {
+function PestBug({ onPest, groupIdx }: { onPest: () => void; groupIdx: number }) {
   const grp = useRef<Group>(null)
   const ring = useRef<Mesh>(null)
 
@@ -694,7 +701,7 @@ function PestBug({ onPest }: { onPest: () => void }) {
     const on = ev?.type === 'pest'
     g.visible = on
     if (!on || !ev) return
-    const [px, pz] = plotPosition(ev.plot)
+    const [px, pz] = plotPosition(ev.plot, groupIdx)
     const t = performance.now() / 1000
     g.position.set(
       px + Math.cos(t * 2.1) * 0.13,
@@ -996,7 +1003,7 @@ function EventsTicker({ plots }: { plots: SaveData['plots'] }) {
 // —— D7 withered 恢复计时浮字 + 状态推动 ——
 
 /** D7：withered 地块头顶浮字 "🍂 荒废中… Xs"，节流 1s */
-function WitheredRecoverHint({ plots }: { plots: SaveData['plots'] }) {
+function WitheredRecoverHint({ plots, groupIdx }: { plots: SaveData['plots']; groupIdx: number }) {
   const lastShownAtRef = useRef(0)
 
   useFrame(() => {
@@ -1008,7 +1015,7 @@ function WitheredRecoverHint({ plots }: { plots: SaveData['plots'] }) {
       if (p.state !== 'withered') continue
       const secs = getPlotStateRecoveryMs(i, Date.now(), plots)
       if (secs <= 0) continue
-      const [px, pz] = plotPosition(i)
+      const [px, pz] = plotPosition(i, groupIdx)
       lastShownAtRef.current = now
       queueFloater(px, 0.62, pz, `🍂 荒废中… ${secs}s`)
       break // 每帧最多一个，避免栈炸
@@ -1070,7 +1077,7 @@ const FenceRing = memo(function FenceRing() {
   )
 })
 
-export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSceneProps) {
+export default function FarmScene({ data, onPlot, onPest, onTickPlots, currentGroupIdx = 0 }: FarmSceneProps) {
   const dirtGltf = useGLTF(ASSETS.dirt)
   const carrotGltf = useGLTF(ASSETS.carrot)
   const cornGltf = useGLTF(ASSETS.corn)
@@ -1104,7 +1111,7 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
       <Lights />
       <Suspense fallback={null}>
         <Ground />
-        <Farm data={data} onPlot={onPlot} make={make} />
+        <Farm data={data} onPlot={onPlot} make={make} groupIdx={currentGroupIdx} />
         <FenceRing />
         <Tree kind="NormalTree_1" height={1.7} position={[-4.8, -3.0]} rotationY={0.3} />
         <Tree kind="NormalTree_3" height={2.2} position={[3.6, -3.0]} rotationY={-1.2} />
@@ -1115,7 +1122,7 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
         {decorations.map((d) => (
           <DecorationItem key={d.id} kind={d.kind} position={[d.x, d.z]} rotationY={d.rotY} />
         ))}
-        <PestBug onPest={onPest} />
+        <PestBug onPest={onPest} groupIdx={currentGroupIdx} />
         <RainParticles />
         <PopLayer />
         <Shockwave />
@@ -1124,7 +1131,7 @@ export default function FarmScene({ data, onPlot, onPest, onTickPlots }: FarmSce
         <FloaterBridge />
         <WeatherMood />
         <EventsTicker plots={data.plots} />
-        <WitheredRecoverHint plots={data.plots} />
+        <WitheredRecoverHint plots={data.plots} groupIdx={currentGroupIdx} />
         <PlotStateTicker plots={data.plots} onTickPlots={onTickPlots} />
         {/* P2-1 新手引导 3D 箭头：step=2 指向 plot 0，step=3 指向目标地块 */}
         {tutorial?.step === 2 && tutorial.targetPlot !== null && (

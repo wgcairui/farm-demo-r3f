@@ -15,6 +15,7 @@ import {
   GRID_ROWS,
   type DecorationKind,
 } from './farm3d/decorations'
+import { PLOT_GROUP_COUNT } from './farm3d/layout'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -54,6 +55,8 @@ export default function App() {
   const { data, tutorial, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
   const [fertMode, setFertMode] = useState(false)
   const [hintsDismissed, setHintsDismissed] = useState(() => readHintsDismissed())
+  // P2-2：当前地块组，0=东园（原点），1=西园（左后方新 6 块）
+  const [plotGroup, setPlotGroup] = useState<0 | 1>(0)
   // 静音状态：useState 初始化时调用 sfx.loadVolumePref()（内部读 localStorage 并同步 muted 标志 + masterGain.gain）
   const [muted, setMutedState] = useState<boolean>(() => loadVolumePref())
   const [comboFlash, setComboFlash] = useState(false)
@@ -134,12 +137,21 @@ export default function App() {
         dpr={[1, 2]}
         camera={{ position: [4.6, 3.6, 5.8], fov: 42, near: 0.1, far: 100 }}
       >
-        <FarmScene data={data} onPlot={handlePlot} onPest={handlePest} onTickPlots={tickPlots} />
+        <FarmScene data={data} onPlot={handlePlot} onPest={handlePest} onTickPlots={tickPlots} currentGroupIdx={plotGroup} />
       </Canvas>
 
       <header className="hud">
         <span className="hud-title">🧑‍🌾 小满农场</span>
         <span className="hud-badge">Phase 1 · D6</span>
+        {/* P2-2 地块组切换：东园 / 西园 */}
+        <button
+          className="plot-group-switch"
+          onClick={() => setPlotGroup((g) => (g === 0 ? 1 : 0))}
+          type="button"
+          title="切换菜园"
+        >
+          {plotGroup === 0 ? '西园' : '东园'}
+        </button>
       </header>
       {/* key=coins：数字变化即重挂载，重放 150ms（DUR.fast）跳动 */}
       <div key={data.coins} className="coins">🪙 {data.coins}</div>
