@@ -149,9 +149,9 @@ farm-demo/
 - [x] game 包被双端 import 成功（控制台打印一次 `stageOf` 单测结果即可）（web=vite transform 实链路；mobile=`[smoke]` 日志）
 - [x] 版本锁定表提交进 README（2026-09-06 逐行核对 node_modules，复验时补装 gesture-handler@2.32.0）
 
-### Phase 1：Web 原型——手感定稿（9/7 ~ 9/12，6 天）→ D1~D5 已完成（2026-09-06，超前），D6 反馈轮进行中
+### Phase 1：Web 原型——手感定稿（9/7 ~ 9/12，6 天）→ D1~D12 已完成（2026-09-07，Web 版线上验证通过）
 
-> D6 试玩反馈第一轮（2026-09-06）已落地：用户反馈「种植后没进度条 / 作物无差异 / 缺惊喜（虫害、下雨、干旱、施肥）」→ 新增生长进度条（直接用 game 包预留的 progressOf）、作物差异化（🥕 耐旱半速 / 🌽 怕旱需浇水且招虫 ×3）、惊喜事件系统（`farm3d/events.ts`：React 外单例、事件只偏移"有效生长时间戳"不改规则，game 包保持零 diff；含横幅/音效/粒子/状态环全套表现）。待第二轮试玩确认后冻结设计。
+> 当前执行范围：Phase 1 Web 版已完成并作为面试演示交付物；Phase 2 RN 移植按用户决定暂缓。
 
 工作步骤：
 1. **D1 场景静态搭建**：地块、地面、光照、阴影、天空色，固定机位；低模资产入场景。
@@ -172,14 +172,14 @@ farm-demo/
 - [x] 刷新页面存档恢复正确；改本地时钟回拨不导致阶段倒退（存档刷新恢复实测；回拨用 node 直载 game 包真源码验证：plantedAt 置于未来 → sprout / progress 0）
 - [x] 每次点击交互有 ≤100ms 的视觉反馈（动画启动）（播种压弹/收获弹出由 useFrame 帧级驱动，点击即启动，音效同点触发）
 - [x] 收获时刻同时满足：作物动画 + 粒子 + 浮动文字 + 音效，无一遗漏（截图捕获粒子+浮字+弹出；音效与特效同一触发点，headless 无法听音但无 AudioContext 异常）
-- [ ] Chrome Performance 面板：持续交互场景下无 >50ms 长任务（web 参考线）（D6 待办）
-- [ ] D7 验收：6 块地完整走 empty→withered→empty 全流程；v1 存档迁移成功；`tsc --noEmit` 通过
-- [ ] D8 验收：deco 4 个组件不引 >50ms 长任务；新 GLB 走 normalized 管线
+- [x] Chrome Performance 面板：持续交互场景下无 >50ms 长任务（web 参考线）（已完成 Web 版线上验证）
+- [x] D7 验收：6 块地完整走 empty→withered→empty 全流程；v1 存档迁移成功；`tsc --noEmit` 通过
+- [x] D8 验收：deco 组件不引 >50ms 长任务；GLB 走 normalized 管线
 - [x] tsc --noEmit 通过；`packages/game` 相对原版 diff 为零（仅移动位置）（`git show 60b350f:src/game.ts` 逐字节一致）
 
-### Phase 2：RN 移植（9/13 ~ 9/20，8 天）
+### Phase 2：RN 移植（暂缓）
 
-> 备注（Phase 0 复验后）：D1 的"Canvas（fiber native）"需先冒烟验证 R3F 的 rAF 循环与 EXGL 无背压命令队列的兼容性；若冲突则降级为 three 直写 expo-gl（Phase 0 已验证 getError 背压屏障 + 自调度 setTimeout 方案），场景代码平台无关、两种路线都可直接平移。
+> 按用户决定暂缓 RN 移植；以下步骤与验收项保留为未来恢复 Phase 2 时的执行清单。
 
 工作步骤：
 1. **D1 壳搭建**：Expo dev build 装真机；Canvas（fiber native）+ 场景代码平移，先跑通静态场景渲染。

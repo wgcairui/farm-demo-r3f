@@ -69,6 +69,7 @@ export function normalized(src: Object3D, opts: NormalizeOpts): Group {
       const newMats = oldMats.map((old) => {
         const t = new MeshToonMaterial({
           color: old.color,
+          map: old.map,
           gradientMap: toonGradient(),
           transparent: old.transparent,
           opacity: old.opacity,

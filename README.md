@@ -1,6 +1,6 @@
 # farm-demo
 
-「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线零 diff——D7 主动破例重构，理由见 PROGRESS.md）。当前进度：**Phase 1 D6 进行中、D7/D8 计划已批准**（土地状态机 + 田园背景装饰）；详细 D 级轨迹见 [PROGRESS.md](PROGRESS.md)，验收勾选见 [docs/PRD.md](docs/PRD.md)。
+「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线零 diff——D7 主动破例重构，理由见 PROGRESS.md）。当前进度：**Phase 1 D1~D12 已完成，Web 版已部署并验证；Phase 2 RN 移植按用户决定暂缓**；详细 D 级轨迹见 [PROGRESS.md](PROGRESS.md)，验收勾选见 [docs/PRD.md](docs/PRD.md)。
 
 详细计划见 [docs/PRD.md](docs/PRD.md)，资产清单与授权见 [packages/assets/ASSETS.md](packages/assets/ASSETS.md)。
 
@@ -18,18 +18,20 @@ farm-demo/
 └── docs/            # PRD（含验收清单勾选进度）
 ```
 
-## 进度（2026-09-06；D7~D10 完成 + Vercel 单线部署）
+## 进度（2026-09-07；Phase 1 D1~D12 完成 + Vercel 单线部署）
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
 | Phase 0 准备与骨架 | ✅ 完成（当日复验 4/4 + 源码审计清零） | workspaces / game 包零 diff / expo-gl×three 跑通 / 版本表 / gesture-handler 锁定 |
 | Phase 1 Web 原型 D1~D5 | ✅ 完成 | R3F 场景 + 核心循环 + 环绕相机 + 生长插值 + juice 四件套 + motion 动画规范（提交 61e0758 → 0cd6398） |
 | Phase 1 D6 反馈轮 | ✅ 完成 | 生长进度条 + 作物差异化 + 雨/旱/虫/施肥事件系统（提交 6b7baf1） |
-| Phase 1 D7 状态机扩展 | ✅ 完成 | 6 状态生命周期 + withered 8s 自动恢复 + v1→v2 存档迁移；破 game 包零 diff 红线（用户批准） |
-| Phase 1 D8 田园背景装饰 | ✅ 完成 | 程序化柯基 + 狗屋 + 池塘 + 石板路（提交 48bfb91 → 4e6f8ce + 两轮 review fix） |
+| Phase 1 D7 状态机扩展 | ✅ 完成 | 6 状态生命周期 + withered 8s 自动恢复 + v1→v2 存档迁移 |
+| Phase 1 D8 田园背景装饰 | ✅ 完成 | 程序化柯基 + 狗屋 + 石板路 + 仓库等装饰；鱼塘组件保留但当前不挂载 |
 | Phase 1 D9 部署基建 | ✅ 完成 | Dockerfile + vercel.json + `.vercelignore`（cc 链路 2026-09-06 下线） |
 | Phase 1 D10 菜园入口 + 仓库 | ✅ 完成 | FenceRing 留缺口 + 石板路穿过 + 程序化木墙茅草顶仓库 |
-| Phase 2 RN 移植（9/13~） | ⬜ 未开始 | 渲染层 D1 冒烟后定：fiber native vs three 直写（倾向后者，背压循环已验证） |
+| Phase 1 D11 cc 部署下线 | ✅ 完成 | cc 容器、镜像、nginx vhost 清理，Vercel 作为唯一生产站点 |
+| Phase 1 D12 布局审计与视觉收尾 | ✅ 完成 | 收获点击、仓库方向/高度、石板路/树木布局、Toon 材质描边、树木贴图与线上验证 |
+| Phase 2 RN 移植（9/13~） | ⏸ 暂缓 | 按用户决定暂不移植，Web 版作为当前面试演示交付物 |
 | Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
 
 ### D6 试玩反馈第一轮（2026-09-06）
