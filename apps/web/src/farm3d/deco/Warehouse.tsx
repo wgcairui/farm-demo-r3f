@@ -103,32 +103,35 @@ function buildWarehouse(): Group {
   g.add(latch)
 
   // 山墙屋顶（双坡）：两个斜置 box 拼成「人」字顶
-  // D12 第三轮：屋脊沿 x 轴（与门面 +x 平行），前后坡沿 z 轴斜置。
-  // 这样相机从 +x +z 看过来时屋脊与门面平行、屋顶呈现「∧」对称形。
-  // 前坡朝 +z（朝菜园/相机），后坡朝 -z（朝背栏）。
-  // 屋脊高度 1.55，屋檐高度 1.28，屋脊长 2.4（沿 x 轴与门面宽一致）。
+  // D12 第四轮：屋脊沿 x 轴（与门面 +x 平行），前后坡沿 z 轴斜置。
+  // D12 第三轮屋顶高度算错：panel z 半长 0.5、坡度 30°、panel 中心 y=1.4，
+  // 算下来屋檐高度 = 1.4 - 0.5*sin30° = 1.15 < 墙顶 1.28，屋檐被墙挡 0.13m
+  // 视觉上屋顶被"截顶"。这一轮把 panel 中心抬高到 y=1.7：
+  //   屋檐端高度 = 1.7 - 0.25 = 1.45（高于墙顶 0.17m，露出屋檐）✓
+  //   屋脊端高度 = 1.7 + 0.25 = 1.95
+  // ridge / gable 同步抬高，保持屋顶完整。
   const roofPanelGeo = new BoxGeometry(2.4, 0.04, 1.0)
   const roofF = new Mesh(roofPanelGeo, roofMat)
-  roofF.position.set(0, 1.4, 0.55) // +z 侧坡（朝前/菜园）
+  roofF.position.set(0, 1.7, 1.0) // +z 侧坡（朝前/菜园），屋檐端 z=1.5 超出墙面半边 1.0 0.5m
   roofF.rotation.x = Math.PI / 6
   roofF.castShadow = true
   g.add(roofF)
   const roofB = new Mesh(roofPanelGeo, roofMat)
-  roofB.position.set(0, 1.4, -0.55) // -z 侧坡（背门/朝栏）
+  roofB.position.set(0, 1.7, -1.0) // -z 侧坡（背门/朝栏）
   roofB.rotation.x = -Math.PI / 6
   roofB.castShadow = true
   g.add(roofB)
   // 山墙三角封板（垂直屋脊方向，在 x=±1.21 两端，挡屋顶和墙之间的缝）
-  // 板面在 xz 平面（沿 x 宽、沿 y 高），位于山墙前后两端
-  const gableGeo = new BoxGeometry(0.02, 0.55, 1.1)
+  // 板面在 xz 平面（沿 x 宽、沿 y 高），位于山墙前后两端，与屋檐 z 端 ±1.5 齐平
+  const gableGeo = new BoxGeometry(0.02, 0.55, 1.5)
   for (const side of [-1, 1]) {
     const gable = new Mesh(gableGeo, wallMat)
-    gable.position.set(side * 1.21, 1.42, 0)
+    gable.position.set(side * 1.21, 1.72, 0)
     g.add(gable)
   }
   // 屋脊横木（沿 x 轴，与门面平行）
   const ridge = new Mesh(new BoxGeometry(2.4, 0.05, 0.08), roofMat)
-  ridge.position.set(0, 1.66, 0)
+  ridge.position.set(0, 1.96, 0)
   g.add(ridge)
 
   // 牌匾（门上方，木色横匾，比 cottage 略宽）
