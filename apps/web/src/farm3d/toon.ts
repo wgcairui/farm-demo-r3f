@@ -101,6 +101,10 @@ export function attachOutline(mesh: Mesh, scale = 1.03): Mesh {
   shell.castShadow = false
   shell.receiveShadow = false
   shell.userData._outlinedShell = true
+  // outline shell 是纯视觉外壳，永远不拦截 pointer 事件——
+  // 否则 P2-3 装饰摆件会挡住地块 raycast，破坏播种/收获/施肥/驱虫。
+  // attachOutlineDeep 调用方无需额外处理 shell raycast。
+  shell.raycast = () => null
   mesh.add(shell)
   return shell
 }
