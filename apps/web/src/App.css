@@ -362,9 +362,11 @@ body {
 .floater.combo-4 { color: #ff7a30; font-size: 32px; text-shadow: 0 0 16px rgba(255,80,0,.8); }
 .floater.combo-5 { color: #ff4030; font-size: 36px; text-shadow: 0 0 20px rgba(255,40,0,.9); }
 
-/* combo >= 4 时全屏金色 vignette 闪光 */
+/* combo >= 4 时全屏金色 vignette 闪光。
+   z-index: 4 故意低于 #float-root（5），让连击浮字（地块头顶"+N"）盖在闪光之上——
+   否则 150ms 内 combo 浮字被 vignette 遮住，玩家看不到反馈。 */
 #combo-flash {
-  position: absolute; inset: 0; pointer-events: none; z-index: 6;
+  position: absolute; inset: 0; pointer-events: none; z-index: 4;
   background: radial-gradient(circle at center, rgba(255,200,80,0) 60%, rgba(255,180,40,0.45) 100%);
   opacity: 0; transition: opacity 150ms ease-out;
 }

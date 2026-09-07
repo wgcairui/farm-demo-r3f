@@ -7,7 +7,7 @@ import FarmScene from './farm3d/FarmScene'
 import { useFarm } from './farm3d/useFarm'
 import { setMuted, loadVolumePref } from './farm3d/sfx'
 import { subscribeCombo } from './farm3d/combo'
-import { loadTutorialDone, skipTutorial, startTutorial } from './farm3d/tutorial'
+import { dismissTutorialOnce, loadTutorialDone, skipTutorial, startTutorial } from './farm3d/tutorial'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -132,8 +132,12 @@ export default function App() {
             {tutorial.step === 2 && 'Step 2/3: 点这里播种到空地'}
             {tutorial.step === 3 && 'Step 3/3: 等待作物成熟后点击收获'}
           </span>
-          <button onClick={skipTutorial} type="button">× 跳过</button>
-          <button onClick={skipTutorial} type="button">不再提示</button>
+          <button onClick={dismissTutorialOnce} type="button" aria-label="本次跳过">
+            × 跳过
+          </button>
+          <button onClick={skipTutorial} type="button">
+            不再提示
+          </button>
         </div>
       )}
 

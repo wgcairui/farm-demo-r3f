@@ -45,8 +45,10 @@ export default function TutorialArrow({ target, plotIndex = 0 }: TutorialArrowPr
     const [px, pz] = plotPosition(plotIndex)
     return (
       <group ref={groupRef} position={[px, 0.9, pz]}>
-        {/* 脉冲圆环：位于 y=0.04（略高于地面） */}
-        <mesh ref={ringRef} rotation-x={-Math.PI / 2} position={[0, 0.04, 0]}>
+        {/* 脉冲圆环：位于 y=0.04（略高于地面）。
+            raycast={null} 让 pointer event 穿透到下层地块，避免引导期间点不到 plot 卡死 step 2/3。
+            参考 FarmScene.tsx StatusRing/Shockwave 的成熟做法。 */}
+        <mesh ref={ringRef} rotation-x={-Math.PI / 2} position={[0, 0.04, 0]} raycast={() => null}>
           <ringGeometry args={[0.38, 0.52, 36]} />
           <meshBasicMaterial
             color={target === 'plot-mature' ? 0xffd24a : 0xfff2b0}
@@ -56,14 +58,12 @@ export default function TutorialArrow({ target, plotIndex = 0 }: TutorialArrowPr
           />
         </mesh>
 
-        {/* 向下指的箭头：圆锥 + 圆柱杆 */}
-        {/* 圆锥（箭头头） */}
-        <mesh position={[0, -0.42, 0]}>
+        {/* 向下指的箭头：圆锥 + 圆柱杆，纯装饰不拦截 pointer */}
+        <mesh position={[0, -0.42, 0]} raycast={() => null}>
           <coneGeometry args={[0.12, 0.28, 12]} />
           <meshBasicMaterial color={target === 'plot-mature' ? 0xffd24a : 0xfff2b0} />
         </mesh>
-        {/* 圆柱（箭头杆） */}
-        <mesh position={[0, -0.1, 0]}>
+        <mesh position={[0, -0.1, 0]} raycast={() => null}>
           <cylinderGeometry args={[0.035, 0.035, 0.45, 10]} />
           <meshBasicMaterial color={target === 'plot-mature' ? 0xffd24a : 0xfff2b0} />
         </mesh>

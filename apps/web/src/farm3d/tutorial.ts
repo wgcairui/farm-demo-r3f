@@ -54,7 +54,8 @@ export function nextStep(plantedPlot?: number): void {
   _notify()
 }
 
-/** 跳过引导 */
+/** 跳过引导 + 永久关闭（写 localStorage，下次刷新不再显示）。
+    "不再提示"按钮走这里 */
 export function skipTutorial(): void {
   _state = { step: 'done', complete: true, targetPlot: null }
   try {
@@ -62,6 +63,14 @@ export function skipTutorial(): void {
   } catch {
     /* 隐私模式 */
   }
+  _notify()
+}
+
+/** 仅本次会话关闭：把 step 重置为 0（隐藏 overlay），但不写 localStorage、不标 complete。
+    下次任何 nextStep() / startTutorial() 还能继续推进；刷新后 App 挂载会再次启动。
+    "× 跳过"按钮走这里——与现有 .hints 的 closeHintsOnce 行为一致 */
+export function dismissTutorialOnce(): void {
+  _state = { step: 0, complete: false, targetPlot: null }
   _notify()
 }
 

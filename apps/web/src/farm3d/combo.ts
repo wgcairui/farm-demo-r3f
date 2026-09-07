@@ -9,8 +9,8 @@ let lastHarvestAt = 0
 let sequence = 0
 const subscribers = new Set<(c: { count: number; at: number; seq: number }) => void>()
 
-/** 每次收获时调用；返回当前 combo 与是否新一段（seq 递增） */
-export function recordHarvest(now: number): { count: number; isNew: boolean } {
+/** 每次收获时调用；返回当前 combo。seq 在窗口过期/重置时递增，可用于 React key 强制重挂载 */
+export function recordHarvest(now: number): { count: number; seq: number } {
   if (now - lastHarvestAt < COMBO_WINDOW_MS) {
     comboCount++
   } else {
@@ -20,7 +20,7 @@ export function recordHarvest(now: number): { count: number; isNew: boolean } {
   lastHarvestAt = now
   const payload = { count: comboCount, at: now, seq: sequence }
   subscribers.forEach((fn) => fn(payload))
-  return { count: comboCount, isNew: now - lastHarvestAt >= COMBO_WINDOW_MS }
+  return { count: comboCount, seq: sequence }
 }
 
 /** 供 React 订阅当前 combo 状态 */
