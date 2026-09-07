@@ -42,98 +42,102 @@ function buildWarehouse(): Group {
   const ventMat = new MeshLambertMaterial({ color: 0x111111 }) // 通风缝几乎全黑
   const hingeMat = new MeshLambertMaterial({ color: 0x222222 }) // 铁铰链黑
 
-  // 底座（2.2w × 0.08h × 2.6d，w/d 对调以匹配「门朝 +x」的长边朝向）
-  const base = new Mesh(new BoxGeometry(2.2, 0.08, 2.6), baseMat)
+  // 底座（2.4w × 0.08h × 2.0d，面门是宽边 2.4）
+  const base = new Mesh(new BoxGeometry(2.4, 0.08, 2.0), baseMat)
   base.position.y = 0.04
   base.castShadow = true
   base.receiveShadow = true
   g.add(base)
 
-  // 主体墙（2.0w × 1.2h × 2.4d，w/d 对调）
-  const wall = new Mesh(new BoxGeometry(2.0, 1.2, 2.4), wallMat)
+  // 主体墙（2.4w × 1.2h × 2.0d，面门 +x 是宽边 2.4）
+  const wall = new Mesh(new BoxGeometry(2.4, 1.2, 2.0), wallMat)
   wall.position.y = 0.68
   wall.castShadow = true
   wall.receiveShadow = true
   g.add(wall)
 
-  // 竖向木板条（前墙 +x 面，5 条沿 z 方向均匀分布）
+  // 竖向木板条（前墙 +x 面宽 2.4，5 条沿 z 方向均匀分布）
   const plankGeo = new BoxGeometry(0.02, 1.0, 0.06)
   for (let i = -2; i <= 2; i++) {
     // 跳过中间留门缝位置
     if (i === 0) continue
     const plank = new Mesh(plankGeo, plankMat)
-    plank.position.set(1.012, 0.6, i * 0.45)
+    plank.position.set(1.212, 0.6, i * 0.36)
     g.add(plank)
   }
-  // 侧墙竖向板条（沿 x 方向）
+  // 侧墙竖向板条（沿 x 方向，贴 ±z 面）
   const sidePlankGeo = new BoxGeometry(0.06, 1.0, 0.02)
   for (let side = -1; side <= 1; side += 2) {
     for (let i = -2; i <= 2; i++) {
       const plank = new Mesh(sidePlankGeo, plankMat)
-      plank.position.set(i * 0.4, 0.6, side * 1.212)
+      plank.position.set(i * 0.45, 0.6, side * 1.012)
       g.add(plank)
     }
   }
 
-  // 双木门（左扇 + 右扇，门沿 z 轴排列）
+  // 双木门（左扇 + 右扇，门沿 z 轴排列在 +x 宽面）
   const doorL = new Mesh(new BoxGeometry(0.05, 0.85, 0.45), doorMat)
-  doorL.position.set(1.025, 0.485, -0.24)
+  doorL.position.set(1.212, 0.485, -0.24)
   doorL.castShadow = true
   g.add(doorL)
   const doorR = new Mesh(new BoxGeometry(0.05, 0.85, 0.45), doorMat)
-  doorR.position.set(1.025, 0.485, 0.24)
+  doorR.position.set(1.212, 0.485, 0.24)
   doorR.castShadow = true
   g.add(doorR)
   // 门缝（沿 z 轴的窄缝）
   const seam = new Mesh(new BoxGeometry(0.06, 0.85, 0.04), seamMat)
-  seam.position.set(1.025, 0.485, 0)
+  seam.position.set(1.212, 0.485, 0)
   g.add(seam)
   // 铁铰链（4 个：每个门上下各一，沿 z 轴分布在门两侧）
   const hingeGeo = new BoxGeometry(0.04, 0.05, 0.08)
   for (const z of [-0.4, 0.4]) {
     for (const y of [0.2, 0.78]) {
       const h = new Mesh(hingeGeo, hingeMat)
-      h.position.set(1.04, y, z)
+      h.position.set(1.225, y, z)
       g.add(h)
     }
   }
   // 门闩（中央黑色横条，沿 z 轴方向）
   const latch = new Mesh(new BoxGeometry(0.03, 0.5, 0.06), hingeMat)
-  latch.position.set(1.055, 0.45, 0)
+  latch.position.set(1.24, 0.45, 0)
   g.add(latch)
 
-  // 山墙屋顶（双坡）：两个斜置 box 拼成「人」字顶，屋脊沿 x 轴
-  // 屋脊高度 1.55，屋檐高度 1.28，长度沿 z 轴 2.6
-  const roofPanelGeo = new BoxGeometry(1.0, 0.04, 2.6)
-  const roofL = new Mesh(roofPanelGeo, roofMat)
-  roofL.position.set(0.55, 1.4, 0) // +x 侧坡（朝门）
-  roofL.rotation.z = Math.PI / 6 // 沿 z 轴斜置
-  roofL.castShadow = true
-  g.add(roofL)
-  const roofR = new Mesh(roofPanelGeo, roofMat)
-  roofR.position.set(-0.55, 1.4, 0) // -x 侧坡（背门）
-  roofR.rotation.z = -Math.PI / 6
-  roofR.castShadow = true
-  g.add(roofR)
-  // 山墙三角封板（两侧 z 平面，挡屋顶和墙之间的缝）
-  const gableGeo = new BoxGeometry(1.1, 0.55, 0.02)
+  // 山墙屋顶（双坡）：两个斜置 box 拼成「人」字顶
+  // D12 第三轮：屋脊沿 x 轴（与门面 +x 平行），前后坡沿 z 轴斜置。
+  // 这样相机从 +x +z 看过来时屋脊与门面平行、屋顶呈现「∧」对称形。
+  // 前坡朝 +z（朝菜园/相机），后坡朝 -z（朝背栏）。
+  // 屋脊高度 1.55，屋檐高度 1.28，屋脊长 2.4（沿 x 轴与门面宽一致）。
+  const roofPanelGeo = new BoxGeometry(2.4, 0.04, 1.0)
+  const roofF = new Mesh(roofPanelGeo, roofMat)
+  roofF.position.set(0, 1.4, 0.55) // +z 侧坡（朝前/菜园）
+  roofF.rotation.x = Math.PI / 6
+  roofF.castShadow = true
+  g.add(roofF)
+  const roofB = new Mesh(roofPanelGeo, roofMat)
+  roofB.position.set(0, 1.4, -0.55) // -z 侧坡（背门/朝栏）
+  roofB.rotation.x = -Math.PI / 6
+  roofB.castShadow = true
+  g.add(roofB)
+  // 山墙三角封板（垂直屋脊方向，在 x=±1.21 两端，挡屋顶和墙之间的缝）
+  // 板面在 xz 平面（沿 x 宽、沿 y 高），位于山墙前后两端
+  const gableGeo = new BoxGeometry(0.02, 0.55, 1.1)
   for (const side of [-1, 1]) {
     const gable = new Mesh(gableGeo, wallMat)
-    gable.position.set(0, 1.42, side * 1.21)
+    gable.position.set(side * 1.21, 1.42, 0)
     g.add(gable)
   }
-  // 屋脊横木（沿 z 轴）
-  const ridge = new Mesh(new BoxGeometry(0.08, 0.05, 2.6), roofMat)
+  // 屋脊横木（沿 x 轴，与门面平行）
+  const ridge = new Mesh(new BoxGeometry(2.4, 0.05, 0.08), roofMat)
   ridge.position.set(0, 1.66, 0)
   g.add(ridge)
 
   // 牌匾（门上方，木色横匾，比 cottage 略宽）
   const sign = new Mesh(new BoxGeometry(0.05, 0.28, 0.7), signMat)
-  sign.position.set(1.025, 1.05, 0)
+  sign.position.set(1.212, 1.05, 0)
   g.add(sign)
   // 牌匾边框（深色细线）
   const signBorder = new Mesh(new BoxGeometry(0.04, 0.32, 0.74), hingeMat)
-  signBorder.position.set(1.018, 1.05, 0)
+  signBorder.position.set(1.205, 1.05, 0)
   g.add(signBorder)
 
   // 横向通风缝（前墙 +x 面，上下各 2 条沿 z 方向的窄横缝）
@@ -141,7 +145,7 @@ function buildWarehouse(): Group {
   for (const z of [-0.7, 0.7]) {
     for (const y of [0.85, 0.95]) {
       const v = new Mesh(ventHGeo, ventMat)
-      v.position.set(1.025, y, z)
+      v.position.set(1.212, y, z)
       g.add(v)
     }
   }
@@ -150,7 +154,7 @@ function buildWarehouse(): Group {
   for (const side of [-1, 1]) {
     for (const y of [0.85, 0.95]) {
       const v = new Mesh(ventVGeo, ventMat)
-      v.position.set(0, y, side * 1.22)
+      v.position.set(0, y, side * 1.02)
       g.add(v)
     }
   }
@@ -158,8 +162,8 @@ function buildWarehouse(): Group {
   // 木桩支撑（前墙 +x 两侧 4 根粗柱）
   const postGeo = new BoxGeometry(0.12, 1.4, 0.12)
   const postMat = new MeshLambertMaterial({ color: 0x4a2c10 })
-  for (const z of [-1.15, 1.15]) {
-    for (const x of [-1.05, 1.05]) {
+  for (const z of [-1.05, 1.05]) {
+    for (const x of [-1.15, 1.15]) {
       const post = new Mesh(postGeo, postMat)
       post.position.set(x, 0.78, z)
       post.castShadow = true

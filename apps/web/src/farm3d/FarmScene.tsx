@@ -73,7 +73,15 @@ function CameraRig() {
     controls.minPolarAngle = 0.3
     controls.maxPolarAngle = 1.25
     controls.update()
+    controls.saveState() // 记录初始视角，按 R 键可恢复
     controlsRef.current = controls
+    // D12 第三轮：监听 R 键 reset 到 saveState 记录的初始视角。
+    // 之前拖动相机后没出口恢复，用户只能刷新页面——D12 后仓库挪到 (-1.5, -3.0)
+    // 后默认视角被部分遮挡（用户反馈），提供 R 键重置是低成本修复。
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') controls.reset()
+    }
+    window.addEventListener('keydown', onKey)
     // clickGuard 锚点必须在 canvas DOM 元素上：PlotView onClick 给的 e.nativeEvent
     // 也是这个 DOM 上的 pointerup，clientX/clientY 同坐标空间。D12 回归 bug：
     // 之前挂在 Canvas props（外层 div）时 React onPointerDown 在 R3F 接管事件源后
@@ -82,6 +90,7 @@ function CameraRig() {
     return () => {
       controls.dispose()
       controlsRef.current = null
+      window.removeEventListener('keydown', onKey)
       gl.domElement.removeEventListener('pointerdown', trackPointerDown)
     }
   }, [camera, gl])
