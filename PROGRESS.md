@@ -155,6 +155,20 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 
 **部署**：commit `0194339` push origin，Vercel CLI `--prod` Ready in 17s，alias `https://farm-demo-gamma.vercel.app` 已是修复后版本。
 
+### D12 收尾：P1-3 教程提示
+
+**目标**：让用户在不靠运气的情况下也能发现 P1-3 相机动效（开场运镜 + 收获推近 + R 键重置）。
+
+**实现**：
+- `apps/web/src/App.css`：右下角 `.hints` 气泡样式（白底圆角、淡入动画、`.kbd` 风格化 R 键徽标）
+- `apps/web/src/App.tsx`：维护 `hintsDismissed` 状态；首屏从 `farm-demo-hints-v1` localStorage 读取；提供「不再提示」与「×」关闭；监听 `farm:hint-dismiss` CustomEvent
+- `apps/web/src/farm3d/FarmScene.tsx`：R 键 handler / 第一次收获聚焦时派发 `farm:hint-dismiss` 事件，App.tsx 收到后隐藏
+
+**自动淡出策略**：
+- 用户主动点「不再提示」→ 写入 localStorage `farm-demo-hints-v1=dismissed`，永远不再显示
+- 用户点「×」 / 按 R 键 / 收获一次 → 仅本次会话隐藏，刷新后再次显示
+
+
 ---
 
 ## 不在本轮范围（用户明确排除或顺延）

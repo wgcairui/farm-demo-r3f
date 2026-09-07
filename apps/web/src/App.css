@@ -177,6 +177,76 @@ body {
   cursor: pointer;
 }
 
+/* 教程提示：右下角小气泡，让用户知道收获推近与 R 键重置
+   z-index 高于 #float-root（5）但低于事件横幅（6），避免遮挡浮字与事件文案 */
+.hints {
+  position: absolute;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  color: #3a5320;
+  max-width: 260px;
+  z-index: 6;
+  animation: hintFadeIn 280ms ease-out;
+}
+
+.hints .kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #e7f3d6;
+  border: 1px solid #b8d487;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-weight: 700;
+  color: #2d4a1e;
+  font-size: 11px;
+}
+
+.hints-close {
+  background: none;
+  border: none;
+  color: #6f8543;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.hints-close:hover {
+  color: #2d4a1e;
+}
+
+.hints-never {
+  background: none;
+  border: none;
+  color: #6f8543;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.hints-never:hover {
+  color: #2d4a1e;
+}
+
+@keyframes hintFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 #float-root {
   position: absolute;
   inset: 0;

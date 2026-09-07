@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { CROPS, type CropId } from '@farm/game'
 import './App.css'
@@ -12,9 +12,38 @@ const TRAITS: Record<CropId, string> = {
   corn: '怕旱 · 招虫',
 }
 
+const HINTS_KEY = 'farm-demo-hints-v1'
+const HINT_DISMISS_EVENT = 'farm:hint-dismiss'
+
+/** localStorage 读失败（隐私模式、SSR、塞满）时一律视为「未关闭过」 */
+function readHintsDismissed(): boolean {
+  try {
+    return localStorage.getItem(HINTS_KEY) === 'dismissed'
+  } catch {
+    return false
+  }
+}
+
 export default function App() {
   const { data, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
   const [fertMode, setFertMode] = useState(false)
+  const [hintsDismissed, setHintsDismissed] = useState(() => readHintsDismissed())
+
+  useEffect(() => {
+    const onDismiss = () => setHintsDismissed(true)
+    window.addEventListener(HINT_DISMISS_EVENT, onDismiss)
+    return () => window.removeEventListener(HINT_DISMISS_EVENT, onDismiss)
+  }, [])
+
+  const closeHintsOnce = () => setHintsDismissed(true)
+  const closeHintsForever = () => {
+    try {
+      localStorage.setItem(HINTS_KEY, 'dismissed')
+    } catch {
+      // 隐私模式写不进去：降级为本次会话关闭
+    }
+    setHintsDismissed(true)
+  }
 
   const pickSeed = (id: CropId) => {
     select(id)
@@ -47,6 +76,21 @@ export default function App() {
 
       {/* 事件横幅：events.ts 命令式更新（textContent/className），React 不参与 */}
       <div id="event-banner" />
+
+      {/* P1-3 教程提示：让用户发现 R 键重置和收获时的镜头推近
+          自动关闭由 R 键 / 收获动效派发 CustomEvent 触发
+          主动关闭通过 localStorage 永久记忆 */}
+      {!hintsDismissed && (
+        <div className="hints" role="status">
+          <span>收获时镜头会自动推近；按 <span className="kbd">R</span> 重置视角</span>
+          <button className="hints-never" onClick={closeHintsForever} type="button">
+            不再提示
+          </button>
+          <button className="hints-close" onClick={closeHintsOnce} type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+      )}
 
       <div className="seedbar">
         {(Object.keys(CROPS) as CropId[]).map((id) => {

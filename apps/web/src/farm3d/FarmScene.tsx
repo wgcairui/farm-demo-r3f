@@ -112,7 +112,8 @@ function CameraRig() {
     // D12 第三轮：监听 R 键 reset 到 saveState 记录的初始视角。
     // 之前拖动相机后没出口恢复，用户只能刷新页面——D12 后仓库挪到 (-1.5, -3.0)
     // 后默认视角被部分遮挡（用户反馈），提供 R 键重置是低成本修复。
-    // P1-3：reset 同时取消当前收获聚焦动画与开场运镜，恢复用户对 OrbitControls 的控制权。
+    // P1-3：reset 同时取消当前收获聚焦动画与开场运镜，恢复用户对 OrbitControls 的控制权
+    // 并通知 App 关闭右下角教程提示（用户已发现 R 键）
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'r' || e.key === 'R') {
         harvestAnimRef.current = null
@@ -121,6 +122,7 @@ function CameraRig() {
         introToRef.current = null
         controls.reset()
         controls.enabled = true
+        window.dispatchEvent(new CustomEvent('farm:hint-dismiss'))
       }
     }
     window.addEventListener('keydown', onKey)
@@ -187,6 +189,8 @@ function CameraRig() {
         duration: CAMERA.harvestMs,
       }
       controls.enabled = false
+      // 通知 App 关闭教程提示：第一次收获发生时，用户已体验到镜头推近
+      if (!existing) window.dispatchEvent(new CustomEvent('farm:hint-dismiss'))
     }
 
     const anim = harvestAnimRef.current

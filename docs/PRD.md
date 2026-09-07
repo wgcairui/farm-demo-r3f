@@ -173,7 +173,7 @@ farm-demo/
 - [x] 每次点击交互有 ≤100ms 的视觉反馈（动画启动）（播种压弹/收获弹出由 useFrame 帧级驱动，点击即启动，音效同点触发）
 - [x] 收获时刻同时满足：作物动画 + 粒子 + 浮动文字 + 音效，无一遗漏（截图捕获粒子+浮字+弹出；音效与特效同一触发点，headless 无法听音但无 AudioContext 异常）
 - [x] Chrome Performance 面板：持续交互场景下无 >50ms 长任务（web 参考线）（已完成 Web 版线上验证）
-- [x] P1-3 相机动效：开场运镜（从更远更高机位 outCubic 滑入默认视角）+ 收获时对目标地块轻微推近再回位；R 键 reset 可中断动画。
+- [x] P1-3 相机动效：开场运镜（从更远更高机位 outCubic 滑入默认视角）+ 收获时对目标地块轻微推近再回位；R 键 reset 可中断动画；首次进入有右下角 HUD 教程提示，可关闭或「不再提示」。
 - [x] D7 验收：6 块地完整走 empty→withered→empty 全流程；v1 存档迁移成功；`tsc --noEmit` 通过
 - [x] D8 验收：deco 组件不引 >50ms 长任务；GLB 走 normalized 管线
 - [x] tsc --noEmit 通过；`packages/game` 相对原版 diff 为零（仅移动位置）（`git show 60b350f:src/game.ts` 逐字节一致）
