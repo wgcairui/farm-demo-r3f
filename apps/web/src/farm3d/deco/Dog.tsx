@@ -1,5 +1,6 @@
 // 田园小狗：蹲姿柯基 + 静态放在狗屋旁 + 摇尾动画。
 // 头大身小萌系，橘白配色；不再巡逻。
+// D12 第五轮：MeshLambertMaterial → toon() + 描边。
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
@@ -7,18 +8,18 @@ import {
   ConeGeometry,
   Group,
   Mesh,
-  MeshLambertMaterial,
   SphereGeometry,
 } from 'three'
+import { attachOutlineDeep, toon } from '../toon'
 import { DOG_POS } from './Doghouse'
 
 function buildDog(): Group {
   const g = new Group()
 
-  const orangeMat = new MeshLambertMaterial({ color: 0xe8853a }) // 橘色（背/耳/后腿/尾巴）
-  const whiteMat = new MeshLambertMaterial({ color: 0xf5ead0 }) // 白色（脸/胸/前腿）
-  const darkMat = new MeshLambertMaterial({ color: 0x2a1a0a }) // 黑（鼻/眼瞳）
-  const pinkMat = new MeshLambertMaterial({ color: 0xff9999 }) // 粉（舌头）
+  const orangeMat = toon({ color: 0xe8853a }) // 橘色（背/耳/后腿/尾巴）
+  const whiteMat = toon({ color: 0xf5ead0 }) // 白色（脸/胸/前腿）
+  const darkMat = toon({ color: 0x2a1a0a }) // 黑（鼻/眼瞳）
+  const pinkMat = toon({ color: 0xff9999 }) // 粉（舌头）
 
   // 后躯（坐姿：扁而宽）
   const hind = new Mesh(new BoxGeometry(0.35, 0.25, 0.45), orangeMat)
@@ -101,6 +102,9 @@ function buildDog(): Group {
   tail.name = 'tail'
   tail.position.set(0, 0.32, -0.35)
   g.add(tail)
+
+  // inverted-hull 描边（在子 mesh 都加完后一次性 traverse）
+  attachOutlineDeep(g)
 
   return g
 }

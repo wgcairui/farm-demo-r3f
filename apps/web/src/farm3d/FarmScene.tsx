@@ -7,7 +7,7 @@ import type {
   InstancedMesh,
   MeshBasicMaterial,
 } from 'three'
-import { Color, Mesh, Object3D, Vector3 } from 'three'
+import { Color, Mesh, Object3D, PlaneGeometry, Vector3 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CROPS, progressOf, type CropId, type PlotState, type SaveData } from '@farm/game'
 import { ASSETS } from './assets'
@@ -46,6 +46,7 @@ import { normalized, useGLTF } from './gltf'
 import { PLOT_COLS, PLOT_ROWS, plotPosition } from './layout'
 import { DUR, ease } from './motion'
 import { PLOT_STATE_TINT } from './landState'
+import { toon, toonGradient } from './toon'
 
 export interface FarmSceneProps {
   data: SaveData
@@ -140,10 +141,24 @@ const Ground = memo(function Ground() {
   return (
     <mesh rotation-x={-Math.PI / 2} receiveShadow>
       <planeGeometry args={[40, 40]} />
-      <meshLambertMaterial color={0x72b356} />
+      <ToonMat color={0x72b356} />
     </mesh>
   )
 })
+
+// D12 第五轮：toon material 桥组件。让 R3F JSX 写法可以直接用共享 toon gradient，
+// 避免每个 meshLambertMaterial → meshToonMaterial 都得 useMemo 写三行。
+// emissive 支持给金币粒子等需要"无视光照保持原色"的元素用。
+function ToonMat({ color, emissive, emissiveIntensity }: { color: number; emissive?: number; emissiveIntensity?: number }) {
+  return (
+    <meshToonMaterial
+      color={color}
+      gradientMap={toonGradient()}
+      emissive={emissive ?? 0x000000}
+      emissiveIntensity={emissive ? (emissiveIntensity ?? 1) : 0}
+    />
+  )
+}
 
 // 天气氛围：天空/雾色向目标色缓慢靠拢（<color attach> 的实例就在 scene.background 上）
 const SKY = new Color(0x87ceeb)
@@ -253,7 +268,7 @@ function PlotView({ index, crop, plantedAt, state, hint, onPlot, make }: PlotVie
     if (dirtRef.current) {
       dirtRef.current.traverse((o) => {
         if (o instanceof Mesh) {
-          const mat = o.material as MeshBasicMaterial | import('three').MeshLambertMaterial
+          const mat = o.material as MeshBasicMaterial | import('three').MeshToonMaterial
           if ('color' in mat && mat) mat.color.setHex(PLOT_STATE_TINT[state])
         }
       })
@@ -454,11 +469,11 @@ function PestBug({ onPest }: { onPest: () => void }) {
     >
       <mesh scale={[1, 0.8, 1.3]}>
         <sphereGeometry args={[0.055, 12, 10]} />
-        <meshLambertMaterial color={0x3a2a20} />
+        <meshToonMaterial color={0x3a2a20} />
       </mesh>
       <mesh position={[0, 0.012, 0.055]}>
         <sphereGeometry args={[0.032, 10, 8]} />
-        <meshLambertMaterial color={0x241812} />
+        <meshToonMaterial color={0x241812} />
       </mesh>
       {/* 透明放大 hitbox：虫体太小难点中，点偏落回地块会误触发施肥/收获 */}
       <mesh scale={[2.4, 2.4, 2.4]}>
@@ -653,7 +668,7 @@ function LeafBurst() {
   return (
     <instancedMesh ref={meshRef} args={[undefined!, undefined!, 16]} frustumCulled={false}>
       <planeGeometry args={[1, 1]} />
-      <meshLambertMaterial color={0x6ec24a} side={2 as const} />
+      <ToonMat color={0x6ec24a} />
     </instancedMesh>
   )
 }
@@ -691,7 +706,7 @@ function CoinParticles() {
   return (
     <instancedMesh ref={ref} args={[undefined!, undefined!, MAX_COINS]} frustumCulled={false}>
       <cylinderGeometry args={[0.055, 0.055, 0.018, 14]} />
-      <meshLambertMaterial color={0xffd24a} emissive={0x7a5200} />
+      <ToonMat color={0xffd24a} emissive={0x7a5200} emissiveIntensity={1} />
     </instancedMesh>
   )
 }

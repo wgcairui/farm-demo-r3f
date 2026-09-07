@@ -1,8 +1,11 @@
 // 茅草屋：程序化低模几何体（box + cone 三角屋顶）。
 // 位置：[-3.5, 0, 2.5]，width ~2.2，与 DOG_PATH.center 重合。
 // poly.pizza cottage 模型页 404（ID e0OaPDnTc9 已失效），使用程序化几何体替代。
+// D12 第五轮：MeshLambertMaterial → toon()（共享 gradient 3 色阶），
+// 整体附加 inverted-hull 描边（黑壳 scale 1.03）。
 import { useMemo } from 'react'
-import { Group, BoxGeometry, ConeGeometry, Mesh, MeshLambertMaterial } from 'three'
+import { Group, BoxGeometry, ConeGeometry, Mesh } from 'three'
+import { attachOutlineDeep, toon } from '../toon'
 
 /** cottage 主体位置（与 DOG_PATH.center 一致） */
 export const COTTAGE_POS: [number, number, number] = [-3.5, 0, 2.5]
@@ -11,10 +14,10 @@ function buildCottage(): Group {
   const g = new Group()
 
   // 材质
-  const wallMat = new MeshLambertMaterial({ color: 0xd4a96a }) // 木墙色
-  const roofMat = new MeshLambertMaterial({ color: 0x8b6914 }) // 暗金棕茅草色
-  const doorMat = new MeshLambertMaterial({ color: 0x5c3d1a }) // 深棕门色
-  const baseMat = new MeshLambertMaterial({ color: 0x9a7a5a }) // 底座石色
+  const wallMat = toon({ color: 0xd4a96a }) // 木墙色
+  const roofMat = toon({ color: 0x8b6914 }) // 暗金棕茅草色
+  const doorMat = toon({ color: 0x5c3d1a }) // 深棕门色
+  const baseMat = toon({ color: 0x9a7a5a }) // 底座石色
 
   // 底座石台（0.05 高）
   const base = new Mesh(new BoxGeometry(2.4, 0.08, 2.0), baseMat)
@@ -37,7 +40,7 @@ function buildCottage(): Group {
   g.add(door)
 
   // 左侧小窗（天光蓝半透明）
-  const windowMat = new MeshLambertMaterial({ color: 0xaad4ff, transparent: true, opacity: 0.6 })
+  const windowMat = toon({ color: 0xaad4ff, transparent: true, opacity: 0.6 })
   const windowL = new Mesh(new BoxGeometry(0.3, 0.3, 0.05), windowMat)
   windowL.position.set(-0.7, 1.0, 0.925)
   g.add(windowL)
@@ -57,11 +60,14 @@ function buildCottage(): Group {
   // 烟囱（后面）
   const chimney = new Mesh(
     new BoxGeometry(0.3, 0.5, 0.3),
-    new MeshLambertMaterial({ color: 0xaa7733 }),
+    toon({ color: 0xaa7733 }),
   )
   chimney.position.set(0.6, 2.15, -0.4)
   chimney.castShadow = true
   g.add(chimney)
+
+  // inverted-hull 描边：跳过 transparent 窗户
+  attachOutlineDeep(g)
 
   return g
 }

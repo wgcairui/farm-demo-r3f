@@ -1,6 +1,7 @@
 // 狗屋：小尺寸茅草顶 + 圆拱门洞。
 // 骨头和餐盆放在 cottage 门口附近（参考 QQ 农场布局）。
 // 狗蹲在 DOG_POS（cottage 门口正前方），朝 -x 看回 cottage。
+// D12 第五轮：MeshLambertMaterial → toon() + 描边。
 import { useMemo } from 'react'
 import {
   BoxGeometry,
@@ -8,9 +9,9 @@ import {
   CylinderGeometry,
   Group,
   Mesh,
-  MeshLambertMaterial,
   SphereGeometry,
 } from 'three'
+import { attachOutlineDeep, toon } from '../toon'
 
 /**
  * cottage 门世界坐标：[-2.575, 0, 2.5]
@@ -22,9 +23,9 @@ export const DOGHOUSE_POS: [number, number, number] = [-0.3, 0, 3.8]
 
 function buildDoghouse(): Group {
   const g = new Group()
-  const wallMat = new MeshLambertMaterial({ color: 0xd4a96a }) // 木墙（同 cottage）
-  const roofMat = new MeshLambertMaterial({ color: 0x8b6914 }) // 茅草顶（同 cottage）
-  const doorMat = new MeshLambertMaterial({ color: 0x2a1a0a }) // 黑洞
+  const wallMat = toon({ color: 0xd4a96a }) // 木墙（同 cottage）
+  const roofMat = toon({ color: 0x8b6914 }) // 茅草顶（同 cottage）
+  const doorMat = toon({ color: 0x2a1a0a }) // 黑洞
 
   // 底座（矮，0.04 高）
   const base = new Mesh(new BoxGeometry(0.75, 0.04, 0.7), wallMat)
@@ -57,7 +58,7 @@ function buildDoghouse(): Group {
 
 function buildBone(): Group {
   const g = new Group()
-  const mat = new MeshLambertMaterial({ color: 0xf8f0d8 }) // 骨白
+  const mat = toon({ color: 0xf8f0d8 }) // 骨白
   const center = new Mesh(new BoxGeometry(0.18, 0.04, 0.04), mat)
   center.castShadow = true
   g.add(center)
@@ -72,7 +73,7 @@ function buildBone(): Group {
 
 function buildBowl(): Group {
   const g = new Group()
-  const mat = new MeshLambertMaterial({ color: 0xc89060 }) // 陶土色
+  const mat = toon({ color: 0xc89060 }) // 陶土色
   const bowl = new Mesh(new CylinderGeometry(0.12, 0.1, 0.05, 12), mat)
   bowl.position.y = 0.025
   bowl.castShadow = true
@@ -80,7 +81,7 @@ function buildBowl(): Group {
   // 「狗粮」深色小山
   const food = new Mesh(
     new SphereGeometry(0.09, 8, 6),
-    new MeshLambertMaterial({ color: 0x6a4a2a }),
+    toon({ color: 0x6a4a2a }),
   )
   food.position.y = 0.06
   food.scale.set(1, 0.4, 1)
@@ -114,6 +115,9 @@ export default function Doghouse() {
     const bowl = buildBowl()
     bowl.position.set(-0.5, 0, -0.3)
     g.add(bowl)
+
+    // inverted-hull 描边
+    attachOutlineDeep(g)
 
     return g
   }, [])

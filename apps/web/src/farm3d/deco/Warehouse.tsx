@@ -5,15 +5,16 @@
 // D12 second pass：warehouse footprint 2.6×2.2，z 中心 -3.0 → z∈[-4.1, -1.9]，
 // 背栏 z=-1.7，仓库近墙 z=-1.9 距栏 0.2m，干净不穿模。
 // 程序化几何体（参考 Cottage.tsx 模式），无 GLB 依赖。
+// D12 第五轮：MeshLambertMaterial → toon()，整体附加 inverted-hull 描边。
 import { useMemo } from 'react'
 import {
   BoxGeometry,
   ConeGeometry,
   Group,
   Mesh,
-  MeshLambertMaterial,
   SphereGeometry,
 } from 'three'
+import { attachOutlineDeep, toon } from '../toon'
 
 /** 仓库位置：cotage 偏 +x 后方（z=-3.0，留 0.3m 缓冲与背栏） */
 export const WAREHOUSE_POS: [number, number, number] = [-1.5, 0, -3.0]
@@ -32,15 +33,15 @@ function buildWarehouse(): Group {
   // （前坡从 +z 朝向变成 -x 朝向），从默认相机看「屋顶反了」。
   // 现在 buildWarehouse 内部所有「前墙」元素（门/牌匾/通风缝）放 +x 面，
   // 双坡屋顶沿 z 轴斜置（屋脊沿 x 轴），与 cottage 默认视角一致。
-  const wallMat = new MeshLambertMaterial({ color: 0x8a6a3a }) // 深陈旧木色（区别 cottage 0xd4a96a）
-  const plankMat = new MeshLambertMaterial({ color: 0x6e4f2a }) // 竖向板条更深一档
-  const roofMat = new MeshLambertMaterial({ color: 0x6b4a18 }) // 暗灰棕茅草（区别 cottage 0x8b6914）
-  const doorMat = new MeshLambertMaterial({ color: 0x3d2008 }) // 更深大门
-  const seamMat = new MeshLambertMaterial({ color: 0x1a0a00 }) // 门缝
-  const signMat = new MeshLambertMaterial({ color: 0xe8c878 }) // 牌匾偏赭
-  const baseMat = new MeshLambertMaterial({ color: 0x6a5238 }) // 底座更暗
-  const ventMat = new MeshLambertMaterial({ color: 0x111111 }) // 通风缝几乎全黑
-  const hingeMat = new MeshLambertMaterial({ color: 0x222222 }) // 铁铰链黑
+  const wallMat = toon({ color: 0x8a6a3a }) // 深陈旧木色（区别 cottage 0xd4a96a）
+  const plankMat = toon({ color: 0x6e4f2a }) // 竖向板条更深一档
+  const roofMat = toon({ color: 0x6b4a18 }) // 暗灰棕茅草（区别 cottage 0x8b6914）
+  const doorMat = toon({ color: 0x3d2008 }) // 更深大门
+  const seamMat = toon({ color: 0x1a0a00 }) // 门缝
+  const signMat = toon({ color: 0xe8c878 }) // 牌匾偏赭
+  const baseMat = toon({ color: 0x6a5238 }) // 底座更暗
+  const ventMat = toon({ color: 0x111111 }) // 通风缝几乎全黑
+  const hingeMat = toon({ color: 0x222222 }) // 铁铰链黑
 
   // 底座（2.4w × 0.08h × 2.0d，面门是宽边 2.4）
   const base = new Mesh(new BoxGeometry(2.4, 0.08, 2.0), baseMat)
@@ -164,7 +165,7 @@ function buildWarehouse(): Group {
 
   // 木桩支撑（前墙 +x 两侧 4 根粗柱）
   const postGeo = new BoxGeometry(0.12, 1.4, 0.12)
-  const postMat = new MeshLambertMaterial({ color: 0x4a2c10 })
+  const postMat = toon({ color: 0x4a2c10 })
   for (const z of [-1.05, 1.05]) {
     for (const x of [-1.15, 1.15]) {
       const post = new Mesh(postGeo, postMat)
@@ -173,6 +174,9 @@ function buildWarehouse(): Group {
       g.add(post)
     }
   }
+
+  // inverted-hull 描边
+  attachOutlineDeep(g)
 
   return g
 }
