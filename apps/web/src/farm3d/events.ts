@@ -55,6 +55,8 @@ let lastPlots: Plot[] = []
 let lastBannerKind: string | null = null
 /** 干旱首日标记：跨日时清零 watered */
 let lastDroughtDay = -1
+/** 雨日首日标记：跨日时播 playRain() 一次 */
+let lastRainDay = -1
 let tool: 'seed' | 'fert' = 'seed'
 
 /** 附加层 bonusMs 的合法幅度上限（取最长作物全生长期的 2 倍），手工改档超界直接拒 */
@@ -266,6 +268,13 @@ export function tickEvents(plots: Plot[]): void {
   if (drought && lastDroughtDay !== getGameDay()) {
     enterDrought()
     lastDroughtDay = getGameDay()
+    playDrought()
+  }
+
+  // 雨日首日：今日第一次成为雨日时播一次雨声
+  if (rain && lastRainDay !== getGameDay()) {
+    lastRainDay = getGameDay()
+    playRain()
   }
 
   // 偏移累加：只对生长中（未成熟）的地块生效；成熟后继续累计只会堆出无意义的大数
