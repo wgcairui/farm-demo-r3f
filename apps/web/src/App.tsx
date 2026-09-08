@@ -16,6 +16,7 @@ import {
   type DecorationKind,
 } from './farm3d/decorations'
 import { PLOT_GROUP_COUNT } from './farm3d/layout'
+import { WeatherForecast } from './farm3d/WeatherForecast'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -140,6 +141,7 @@ export default function App() {
         <FarmScene data={data} onPlot={handlePlot} onPest={handlePest} onTickPlots={tickPlots} currentGroupIdx={plotGroup} />
       </Canvas>
 
+      <WeatherForecast />
       <header className="hud">
         <span className="hud-title">🧑‍🌾 小满农场</span>
         <span className="hud-badge">Phase 1 · D6</span>

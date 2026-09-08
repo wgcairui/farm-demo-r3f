@@ -137,7 +137,8 @@ body {
 /* 事件横幅：显隐与文案全部由 events.ts 命令式驱动，CSS 只管外观 */
 #event-banner {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  /* P2-6：让位给顶部天气预报，下移到 safe+88px */
+  top: calc(env(safe-area-inset-top, 0px) + 88px);
   left: 50%;
   transform: translate(-50%, -6px);
   opacity: 0;
@@ -165,6 +166,116 @@ body {
 
 #event-banner.pest {
   background: rgba(150, 40, 32, 0.88);
+}
+
+/* P2-6 天气预报面板：顶部单行药丸，safe+14~50px，让位 event-banner */
+.weather-forecast {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2d4a1e;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 7;
+  pointer-events: auto;
+  max-width: calc(100vw - 32px);
+  overflow-x: auto;
+}
+
+.weather-forecast.drought {
+  background: rgba(255, 240, 210, 0.95);
+  border: 1px solid rgba(146, 94, 22, 0.4);
+}
+
+.wf-date {
+  white-space: nowrap;
+}
+
+.wf-today {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(45, 74, 30, 0.1);
+}
+
+.wf-icon {
+  font-size: 14px;
+}
+
+.wf-temp {
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-cold { color: #3a6a9a; }
+.wf-cool { color: #4a8a4a; }
+.wf-warm { color: #c08020; }
+.wf-hot { color: #c83020; }
+
+.wf-future {
+  display: inline-flex;
+  gap: 6px;
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+  padding-left: 10px;
+}
+
+.wf-future-day {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 11px;
+  color: rgba(45, 74, 30, 0.7);
+}
+
+.wf-future-icon {
+  font-size: 13px;
+}
+
+.wf-future-temp {
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-controls {
+  display: inline-flex;
+  gap: 2px;
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+  padding-left: 8px;
+}
+
+.wf-controls button {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: rgba(45, 74, 30, 0.08);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.wf-controls button:hover {
+  background: rgba(45, 74, 30, 0.2);
+}
+
+.wf-controls button:active {
+  background: rgba(45, 74, 30, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-controls button { transition: none; }
 }
 
 .reset {
