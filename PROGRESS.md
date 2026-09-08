@@ -2,13 +2,13 @@
 
 本文件沉淀每一轮「批准 → 实施 → 验收」的轨迹。README 顶部只保留一句「当前在哪」，PRD §5 是权威工作步骤拆分，本表是 D 级别 + commit 级别的实时状态。
 
-最近更新：2026-09-08（D7~D12 + P1-3 + P2-5 + P2-6 全部完成；D12 视觉收尾与线上验证完成；P2-6 宠物狗踱步）
+最近更新：2026-09-08（D7~D12 + P1-3 + P2-5 ~ P2-7 全部完成；D12 视觉收尾与线上验证完成；P2-6 宠物狗踱步；P2-7 春季日历天气系统）
 
 ---
 
 ## 当前状态
 
-**Phase 1 D7~D12 + P1-3 + P2-5 + P2-6 全部完成**，prod 单线部署：Vercel CDN。
+**Phase 1 D7~D12 + P1-3 + P2-5 ~ P2-7 全部完成**，prod 单线部署：Vercel CDN。
 
 - **Phase 2 RN 移植按用户决定暂缓**，当前以 Web 版作为面试演示交付物。
 
@@ -89,6 +89,79 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 - 摆腿与摇尾拆两次 traverse，状态不耦合。
 - `attachOutline` 已 `shell.raycast=null`（D12 P2-3 修复），狗走动不拦截地块点击。
 - ampX=0.4 在 DOG_POS 周围是空地，骨头/餐盆在 cottage 门口附近（世界 [-3.075, 0, 2.8/2.2]），无碰撞风险。
+
+### P2-7 实施回顾（春季日历天气系统）
+
+**目标**：把「瞬时随机事件（雨/旱）」改成「按春季日历（180 天 / 60s/天）的真实天气分布」。干旱自动涌现（连续 ≥4 天无雨）；顶部 HUD 加天气预报面板（今日 + 未来 5 天 + 快进控件）。
+
+**核心设计原则**：
+- **日历是 UI 层 + 持久化字段，游戏规则时间仍走墙钟**——`packages/game` 零 diff。
+- `elapsedOffsetMs` 是「快进偏移量」：玩家点 ⏩ 就是 += MS_PER_DAY，作物/事件/状态机在同一根时间线同步推进，无撕裂。
+
+**新增模块（3 个）**：
+
+1. `apps/web/src/farm3d/time.ts`
+   - `MS_PER_DAY = 60_000`、`TOTAL_DAYS = 180`（3 月 1 日 ~ 9 月 30 日）
+   - `getNow() / getElapsedMs() / getGameDay() / getGameDate()` 派生时间
+   - `fastForward / jumpToGameDay / jumpToNextRain` 三个快进接口
+   - `registerForecastLookup` 解耦 forecast（避免循环依赖）
+   - 持久化 `farm-time-v1`：`{startAtMs, elapsedOffsetMs}`
+   - 开局 06:00 偏移（春耕开局语义）
+   - `__farmTime` 调试钩子（与现有 `__farmEvent` 同风格）
+
+2. `apps/web/src/farm3d/forecast.ts`
+   - 6 种天气（晴 / 多云 / 阴 / 小雨 / 大雨 / 雷）+ 180 天表
+   - 按月份动态概率表：3 月冷雨少、5 月雷雨最多、夏天更晴
+   - 连雨 ≥3 天强制转晴（避免梅雨无止境）
+   - 干旱涌现：`isDroughtDay(day)` = 连续 ≥4 天无雨
+   - 温度按月线性插值（3 月 -2~12℃ → 7-8 月 22~34℃）
+   - 确定性 mulberry32 RNG + 持久化 `farm-forecast-v1`
+   - 注册 `forecastLookup` 到 time.ts
+   - `__farmForecast` 调试钩子
+
+3. `apps/web/src/farm3d/pestCalendar.ts`
+   - 月份系数：3 月 0.5 / 4 月 1.0 / 5 月 1.5 / 6-9 月 0.8
+   - `getPestWeight(crop)` = 月份系数 × 玉米×3（保留作物偏好）
+   - `events.ts` 改造后接入
+
+**改造（4 个文件）**：
+
+- `apps/web/src/farm3d/events.ts`：
+  - 移除 `RAIN_MS / DROUGHT_MS / ROLL_EVERY_MS / FIRST_EVENT_MS / ROLL_CHANCE` 五个常量
+  - `isRain() / isDrought()` 改为读 forecast 表（导出签名不变）
+  - `tickEvents` 简化：仅 bonusMs 累加 + pest 倒计时 + banner 渲染
+  - 新增 `enterDrought()`（每日跨干旱时清零 watered）
+  - `pickPestPlot()` 改用 `pestCalendar.getMonthPestWeight()` 月份系数
+  - banner 文案按 `forecast.kind / drought / pest` 三类区分
+  - `lastRainDay / lastDroughtDay` 跨日时各播一次音效
+  - 保留 `setRng / __farmEvent('pest')` 演示路径；rain/drought 演示改用 `__farmTime`
+
+- `apps/web/src/farm3d/FarmScene.tsx`：
+  - 旧 `SKY_RAIN_OVERLAY / SKY_DROUGHT_OVERLAY` 替换为 `WEATHER_OVERLAYS` 表（6 种 WeatherKind）
+  - 方向光颜色按 kind（小雨浅蓝/大雨深蓝/雷雨灰蓝），drought 暖橙，其余 sunny 暖白/cloudy 浅灰/overcast 深灰
+  - 抽 `weatherDirIntensity / weatherHemiIntensity / currentWeatherOverlay` 函数复用
+
+- `apps/web/src/App.tsx` + `App.css`：
+  - 新增 `<WeatherForecast />` 组件挂在 `.hud` 上方
+  - `#event-banner` 从 safe+56 下移到 safe+88 让位
+  - 新增 `.weather-forecast / .wf-*` 一组样式（白底圆角药丸，1s 刷新一次）
+
+- `apps/web/src/farm3d/WeatherForecast.tsx`（新文件）：
+  - 显示日期 + 周几 + 小时 / 今日图标 + 温度 / 未来 5 天 / 6 个快进控件
+  - 温度按 4 档配色（冷/凉/暖/热）
+  - 干旱日整条背景偏暖橙
+
+**风险已规避**：
+- `packages/game` 全包零 diff（git diff packages/ 为空）。
+- 旧存档兼容：`farm-time-v1 / farm-forecast-v1` 是新键，与现有 `farm-demo-*` 无冲突；缺失用默认值。
+- 快进 UX：60s/天 + ⏩ 1 天 = 立刻 +1 天（无连续动画，因为底层是偏移量操作）。
+- 干旱涌现边界：连续 4 天阈值是经验值；可调到 5-6 天。
+- 旧 `__farmEvent('rain' | 'drought')` 演示钩子不再支持——演示脚本需改用 `__farmTime.fastForward(7)` 或 `__farmTime.jumpToNextRain()`。
+
+**自检**：
+- `npm run build -w @farm/web` 通过（66 → 71 modules，+5 新文件，bundle 51→58 kB）。
+- TypeScript 全通过（tsc --noEmit 0 错误）。
+- Playwright 自检（5 张截图：baseline / rain / rain-mid / drought / pest）通过，0 console error。
 
 ### D9 实施回顾（部署基建）
 

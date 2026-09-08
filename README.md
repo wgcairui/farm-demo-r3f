@@ -18,7 +18,7 @@ farm-demo/
 └── docs/            # PRD（含验收清单勾选进度）
 ```
 
-## 进度（2026-09-08；Phase 1 D1~D12 + P1-3 + P2-5 + P2-6 全部完成，Vercel 单线部署）
+## 进度（2026-09-08；Phase 1 D1~D12 + P1-3 + P2-5 ~ P2-7 全部完成，Vercel 单线部署）
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
@@ -34,6 +34,7 @@ farm-demo/
 | Phase 3 P1-3 相机动效 | ✅ 完成 | 开场运镜（更远更高机位 outCubic 滑入默认视角）+ 收获时目标地块推近与回位，R 键 reset 仍可中断 |
 | Phase 2 P2-5 天气系统加固 | ✅ 完成 | 三处修复（时钟统一 / RNG 注入 / bonusMs 运行中钳位）+ 视觉氛围（lerp 权重 0.35→0.65 变天感 + 雨粒子风向）；reviewer 三条反馈同步落地；packages/game 零 diff（提交 dd1c494） |
 | Phase 2 P2-6 宠物狗定点踱步 | ✅ 完成 | D8 静态蹲姿升级为门口 6s 一来回定点踱步 + 四腿错相步态 + 躯干微浮 + cos 驱动的摆头；所有振幅/周期走 `deco/motion.ts` 的 `DOG_WALK`；packages/game 零 diff |
+| Phase 2 P2-7 春季日历天气系统 | ✅ 完成 | 180 天 / 60s/天；6 种天气按月动态概率 + 连雨约束 + 自动涌现干旱；顶部 WeatherForecast HUD（今日 + 未来 5 天 + ⏮⏪⏩⏭💧🏠）；天气/干旱由 forecast 派生（events.ts 移除瞬时随机）；packages/game 零 diff |
 | Phase 2 RN 移植（9/13~） | ⏸ 暂缓 | 按用户决定暂不移植，Web 版作为当前面试演示交付物 |
 | Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
 
