@@ -41,10 +41,12 @@ export interface ActiveEvent {
   plantedAt: number | null
 }
 
+// 推进时钟统一用 Date.now()（墙钟）：与 packages/game 的 stageOf/progressOf/tickPlot 同源，
+// 避免 performance.now() 帧时钟与持久化 Date.now() 时间戳混用导致侧栏/浮字/恢复计时偶尔差一拍。
 const fx = new Map<number, PlotFx>()
 let active: ActiveEvent | null = null
-let nextRollAt = performance.now() + FIRST_EVENT_MS
-/** 上一次 tick 的 performance.now：用于后台回来时按墙钟差补结算 */
+let nextRollAt = Date.now() + FIRST_EVENT_MS
+/** 上一次 tick 的 Date.now：用于后台回来时按墙钟差补结算 */
 let lastTickAt: number | null = null
 let lastPlots: Plot[] = []
 let bannerKey = ''
@@ -53,6 +55,13 @@ let tool: 'seed' | 'fert' = 'seed'
 /** 附加层 bonusMs 的合法幅度上限（取最长作物全生长期的 2 倍），手工改档超界直接拒 */
 const BONUS_LIMIT =
   Math.max(...Object.values(CROPS).map((c) => c.stageMs[0] + c.stageMs[1])) * 2
+
+/** 运行中钳位：bonusMs 累加越界会让 effPlot 算出 plantedAt - bonus < 0（"1970 已成熟"假象） */
+function clampBonus(v: number): number {
+  if (v > BONUS_LIMIT) return BONUS_LIMIT
+  if (v < -BONUS_LIMIT) return -BONUS_LIMIT
+  return v
+}
 
 // —— 附加状态持久化：主存档（coins/plots）归 packages/game，这里只存事件附加层 ——
 // 逐帧累加的 bonusMs 不落盘（崩溃丢几秒进度可接受），只在离散动作后整体冲刷。
@@ -147,6 +156,13 @@ function setBanner(ev: ActiveEvent | null, secsLeft = 0): void {
 
 // —— 调度与逐帧推进（EventsTicker 每帧调用）——
 
+// RNG 注入：默认 Math.random；将来 server-side 重放可换 seeded RNG。
+// 集中一处方便后续替换为 xorshift / mulberry32 而不污染业务分支。
+let rng: () => number = Math.random
+export function setRng(next: () => number): void {
+  rng = next
+}
+
 function startEvent(type: EventType, now: number): void {
   let plot = -1
   if (type === 'pest') {
@@ -156,7 +172,7 @@ function startEvent(type: EventType, now: number): void {
       if (p.crop && !isMature(p, i)) w.push(i, ...(p.crop === 'corn' ? [i, i] : []))
     })
     if (w.length === 0) return
-    plot = w[Math.floor(Math.random() * w.length)]
+    plot = w[Math.floor(rng() * w.length)]
   } else {
     // 干旱开始时浇过水的状态清零，每轮干旱都要重新照顾
     for (const f of fx.values()) f.watered = false
@@ -175,7 +191,7 @@ function startEvent(type: EventType, now: number): void {
 }
 
 export function tickEvents(plots: Plot[]): void {
-  const now = performance.now()
+  const now = Date.now()
   const prevTick = lastTickAt
   lastTickAt = now
   // 墙钟差补结算：rAF 在后台标签页暂停，回来那一帧 gap 是真实间隔，一次性补齐——
@@ -190,11 +206,11 @@ export function tickEvents(plots: Plot[]): void {
     const p = plots[i]
     if (!p.crop || isMature(p, i)) continue
     const f = ensure(i)
-    if (f.fert) f.bonusMs += gap * 0.5
-    if (active?.type === 'rain') f.bonusMs += evGap
+    if (f.fert) f.bonusMs = clampBonus(f.bonusMs + gap * 0.5)
+    if (active?.type === 'rain') f.bonusMs = clampBonus(f.bonusMs + evGap)
     else if (active?.type === 'drought') {
-      if (p.crop === 'corn' && !f.watered) f.bonusMs -= evGap
-      else if (p.crop === 'carrot') f.bonusMs += evGap * 0.5
+      if (p.crop === 'corn' && !f.watered) f.bonusMs = clampBonus(f.bonusMs - evGap)
+      else if (p.crop === 'carrot') f.bonusMs = clampBonus(f.bonusMs + evGap * 0.5)
     }
   }
 
@@ -216,8 +232,8 @@ export function tickEvents(plots: Plot[]): void {
       setBanner(active, active.endAt - now)
     }
   } else if (now >= nextRollAt) {
-    if (Math.random() < ROLL_CHANCE) {
-      const r = Math.random()
+    if (rng() < ROLL_CHANCE) {
+      const r = rng()
       startEvent(r < 0.4 ? 'rain' : r < 0.75 ? 'drought' : 'pest', now)
     }
     if (!active) nextRollAt = now + ROLL_EVERY_MS
@@ -254,7 +270,7 @@ export function consumePest(): number {
   if (active?.type !== 'pest') return -1
   const plot = active.plot
   active = null
-  nextRollAt = performance.now() + ROLL_EVERY_MS
+  nextRollAt = Date.now() + ROLL_EVERY_MS
   setBanner(null)
   return plot
 }
@@ -339,7 +355,7 @@ if (typeof window !== 'undefined') {
       active = null
       setBanner(null)
     }
-    startEvent(type, performance.now())
+    startEvent(type, Date.now())
   }
   window.__farmDebug = () => ({ active, fx: [...fx.entries()] })
 }

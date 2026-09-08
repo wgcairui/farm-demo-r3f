@@ -245,6 +245,9 @@ function CameraRig() {
 const _tmpDirColor = new Color()
 const _tmpSkyColor = new Color()
 const _tmpHemiGround = new Color()
+
+/** 天气色偏与昼夜基准的混合权重：0=看不出天气、1=瞬间硬切。0.65 取中间偏强 */
+const WEATHER_BLEND = 0.65
 const getDayNightDirColor = (target: Color, hour: number): Color => {
   if (hour < 5) return target.set(0x6a8aa8) // 深夜
   if (hour < 8) {
@@ -292,19 +295,21 @@ const Lights = memo(function Lights() {
     const dayDirIntensity = getDayNightDirIntensity(hour)
     const dayHemiIntensity = getDayNightHemiIntensity(hour)
 
-    // 天气叠加（35% 权重）：方向光颜色 / 半球光强度
+    // 天气叠加（65% 权重）：方向光颜色 / 半球光强度
+    // 权重从 0.35 提到 0.65：之前"瞬间切但只切 35%"导致变天感弱，玩家看不出天气真的换了。
+    // 仍保留 day* 作为 fallback：无天气 / 边界值时 lerp 65% = 自混合，不破坏昼夜基准。
     const weatherDirIntensity = isRain() ? 1.5 : isDrought() ? 2.7 : dayDirIntensity
     const weatherHemiIntensity = isRain() ? 0.85 : isDrought() ? 1.25 : dayHemiIntensity
-    // 方向光最终颜色 = dayColor lerp(weatherColor, 0.35)
+    // 方向光最终颜色 = dayColor lerp(weatherColor, WEATHER_BLEND)
     // weatherColor：雨天偏冷蓝、旱天偏暖橙、无天气 = 昼夜基准
     if (isRain()) finalDirColor.set(0x6a9ab8)
     else if (isDrought()) finalDirColor.set(0xffb878)
     else finalDirColor.copy(_tmpDirColor)
-    // dayColor (in _tmpDirColor) lerp(weatherColor, 0.35) -> 结果写回 _tmpDirColor
-    _tmpDirColor.lerp(finalDirColor, 0.35)
+    // dayColor (in _tmpDirColor) lerp(weatherColor, WEATHER_BLEND) -> 结果写回 _tmpDirColor
+    _tmpDirColor.lerp(finalDirColor, WEATHER_BLEND)
 
-    const finalDirIntensity = dayDirIntensity + (weatherDirIntensity - dayDirIntensity) * 0.35
-    const finalHemiIntensity = dayHemiIntensity + (weatherHemiIntensity - dayHemiIntensity) * 0.35
+    const finalDirIntensity = dayDirIntensity + (weatherDirIntensity - dayDirIntensity) * WEATHER_BLEND
+    const finalHemiIntensity = dayHemiIntensity + (weatherHemiIntensity - dayHemiIntensity) * WEATHER_BLEND
 
     const k = 1 - Math.exp(-DAY_NIGHT.k * Math.min(dt, 0.1))
     if (dir.current) {
@@ -415,12 +420,12 @@ function WeatherMood() {
 
     // daySky = 昼夜基准（in-place）
     getDayNightSky(daySky, hour)
-    // weather overlay：雨天 / 旱天 / 无天气 = 用 daySky 自己（lerp 0.35 = 无变化）
+    // weather overlay：雨天 / 旱天 / 无天气 = 用 daySky 自己（lerp WEATHER_BLEND）
     if (isRain()) target.copy(SKY_RAIN_OVERLAY)
     else if (isDrought()) target.copy(SKY_DROUGHT_OVERLAY)
     else target.copy(daySky)
-    // daySky lerp(target, 0.35) -> 结果写回 daySky
-    daySky.lerp(target, 0.35)
+    // daySky lerp(target, WEATHER_BLEND) -> 结果写回 daySky
+    daySky.lerp(target, WEATHER_BLEND)
 
     const k = 1 - Math.exp(-DAY_NIGHT.k * Math.min(dt, 0.1))
     const bg = scene.background
@@ -708,7 +713,9 @@ function PestBug({ onPest, groupIdx }: { onPest: () => void; groupIdx: number })
       0.32 + Math.sin(t * 6) * 0.025,
       pz + Math.sin(t * 2.1) * 0.13,
     )
-    const urgency = 1 - Math.max(0, (ev.endAt - performance.now()) / PEST_TTL_MS)
+    // 与 events.ts 的 ev.endAt 同源（Date.now()）：之前用 performance.now() 读 endAt（毫秒级 epoch vs 帧时钟）
+    // 会让 urgency ≈ 1.4×10⁸、sin 频率趋近 0，害虫红圈实际上不会越接近超时闪得越急。
+    const urgency = 1 - Math.max(0, (ev.endAt - Date.now()) / PEST_TTL_MS)
     if (ring.current) {
       ;(ring.current.material as MeshBasicMaterial).opacity =
         0.3 + 0.3 * (0.5 + 0.5 * Math.sin(t * Math.PI * (3 + 7 * urgency)))
@@ -748,8 +755,12 @@ function PestBug({ onPest, groupIdx }: { onPest: () => void; groupIdx: number })
 }
 
 // —— D6 雨：90 条下落细柱循环回收，只有 rain 事件期间可见 ——
-
 const RAIN_COUNT = 90
+
+// 风向：m/s 量级。0 = 垂直下落。负 x = 雨被吹向 -X 方向（粒子 x 递减）。
+// 默认轻微斜风，让雨看起来"被吹"，不至于像被钉子钉着。
+const RAIN_WIND_X = -1.2
+const RAIN_WIND_Z = -0.6
 
 function RainParticles() {
   const ref = useRef<InstancedMesh>(null)
@@ -774,7 +785,9 @@ function RainParticles() {
     const d = Math.min(dt, 0.05)
     for (let i = 0; i < RAIN_COUNT; i++) {
       const p = drops[i]
+      p.x += RAIN_WIND_X * d
       p.y -= p.v * d
+      p.z += RAIN_WIND_Z * d
       if (p.y < 0) {
         p.y = 6.5 + Math.random()
         p.x = (Math.random() - 0.5) * 12
@@ -1033,11 +1046,12 @@ function PlotStateTicker({ plots, onTickPlots }: { plots: SaveData['plots']; onT
   const lastCheckRef = useRef(0)
 
   useFrame(() => {
-    const now = performance.now()
-    // 节流到 1s 检查一次（tickPlot 最小粒度 8s，1s 节流足够）
+    // 节流与推进用同一个时钟（Date.now）：之前用 perf 节流 + Date.now 推进，
+    // 两套时钟起步点不同导致节流粒度与"8s 自动恢复"判定偶发错位一拍。
+    const now = Date.now()
     if (now - lastCheckRef.current < 1000) return
     lastCheckRef.current = now
-    const next = tickPlotStates(plots, Date.now())
+    const next = tickPlotStates(plots, now)
     if (next) onTickPlots(next)
   })
   return null
