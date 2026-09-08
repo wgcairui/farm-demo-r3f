@@ -2,13 +2,13 @@
 
 本文件沉淀每一轮「批准 → 实施 → 验收」的轨迹。README 顶部只保留一句「当前在哪」，PRD §5 是权威工作步骤拆分，本表是 D 级别 + commit 级别的实时状态。
 
-最近更新：2026-09-07（D7~D12 全部完成；D12 视觉收尾与线上验证完成）
+最近更新：2026-09-08（D7~D12 + P1-3 + P2-5 + P2-6 全部完成；D12 视觉收尾与线上验证完成；P2-6 宠物狗踱步）
 
 ---
 
 ## 当前状态
 
-**Phase 1 D7~D12 + P1-3 + P2-5 全部完成**，prod 单线部署：Vercel CDN。
+**Phase 1 D7~D12 + P1-3 + P2-5 + P2-6 全部完成**，prod 单线部署：Vercel CDN。
 
 - **Phase 2 RN 移植按用户决定暂缓**，当前以 Web 版作为面试演示交付物。
 
@@ -69,6 +69,26 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
   - **第二轮**：cottage 整体旋转 +90° 让门朝地块（+x 方向），Doghouse/Dog 坐标重算
 
 **dog 朝向处理细节**：参考图里狗脸朝右看地块，最终用 `rotation={[0, Math.PI/2, 0]}` 让本地 +z（狗鼻子）转向世界 +x。从相机 (5, 8, 4) 视角下狗脸完整可见（眼睛、鼻子、耳朵）。
+
+### P2-6 实施回顾（宠物狗定点踱步）
+
+**目标**：D8 polish 后的静态蹲姿太安静，给狗加上门口定点踱步 + 腿步态 + 摇尾 + 摆头，与 D8「不再巡逻」的克制路线一致。
+
+**关键改动**：
+
+- `apps/web/src/farm3d/deco/motion.ts`：新增 `DOG_WALK` 常量（ampX / periodS / legPhaseOffset / legSwingY / bodyBobY / bodyYaw / tailHz），把振幅/周期集中到一处。删「D8 polish 后删 DOG_PATH」注释。
+- `apps/web/src/farm3d/deco/Dog.tsx`：
+  - 四条腿打 `name='legFL/FR/HL/HR'`，躯干三件（hind/chest/head）打 `name='torso'`（与 `name='tail'` 同模式），useFrame 通过 traverse 找到再 mutate。
+  - 外层 group 改 `useRef` 持有，去掉固定 `rotation` 属性，每帧 mutate `position.x = DOG_POS[0] + ampX*sin(phase)` 与 `rotation.y = π/2 + cos(phase)*bodyYaw`。
+  - 躯干 ±0.012 微浮，腿 ±0.025 错相 π 摆动（前腿抬时后腿落，标准四足 walk），摇尾频率参数化为 `DOG_WALK.tailHz`。
+  - 第一次挂载时 `useMemo` 一次性给要动的部件打 `userData.baseY`，避免每帧重读。
+- 不接 `dog.glb`（poly.pizza 404，ASSETS.md 标 TBD）。
+- 不进 `decorations.ts` 的 `DecorationKind` 单例（狗固定锚点，与用户摆件系统无关）。
+
+**风险已规避**：
+- 摆腿与摇尾拆两次 traverse，状态不耦合。
+- `attachOutline` 已 `shell.raycast=null`（D12 P2-3 修复），狗走动不拦截地块点击。
+- ampX=0.4 在 DOG_POS 周围是空地，骨头/餐盆在 cottage 门口附近（世界 [-3.075, 0, 2.8/2.2]），无碰撞风险。
 
 ### D9 实施回顾（部署基建）
 
