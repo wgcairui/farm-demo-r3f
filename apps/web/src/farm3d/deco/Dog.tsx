@@ -125,6 +125,11 @@ function buildDog(): Group {
  *
  * 坐标约定：最外层 group 锚定 DOG_POS，并保持 Math.PI/2 基础朝向（让狗头朝世界 +x）。
  * 走动偏移 + 摆头叠加在 group 上；腿/躯干/尾的微动发生在 primitive 内（局部坐标）。
+ *
+ * 防漂设计（P2-6 prod 反馈）：ampX 与 bodyYaw 必须都很小。
+ * 狗屋本体在世界 [(-1.975, 3.3)]，狗从 [-1.4, 3.2] 往 +x 走 ampX + 摆头，会塞进 doghouse 圆拱门洞。
+ * 缩 ampX + 缩 bodyYaw 后，狗始终在原地 0.18 半径内踱，且 cos 微转不超过 0.15 rad（≈8.6°），
+ * 配合 leg step + body bob + tail wag 仍生动，但不再有「转脸」动作引发的漂移。
  */
 export default function Dog() {
   const dog = useMemo(() => buildDog(), [])
