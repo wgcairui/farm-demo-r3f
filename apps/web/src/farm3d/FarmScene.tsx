@@ -25,7 +25,6 @@ import {
   tickEvents,
   tickPlotStates,
 } from './events'
-import { getTodayForecast, type WeatherKind } from './forecast'
 import {
   consumeShake,
   getLeafs,
@@ -298,16 +297,19 @@ const Lights = memo(function Lights() {
 
     // 天气叠加（65% 权重）：方向光颜色 / 半球光强度
     // 权重从 0.35 提到 0.65：之前"瞬间切但只切 35%"导致变天感弱，玩家看不出天气真的换了。
-    // P2-6：方向光颜色按 forecast.kind 查表（不只是 rain/干旱二分）。
-    const weatherDirI = weatherDirIntensity(dayDirIntensity)
-    const weatherHemiI = weatherHemiIntensity(dayHemiIntensity)
-    // weatherColor 派生：rain 按 kind（小雨浅、大雨深、雷雨灰蓝），drought 用暖橙
-    currentWeatherOverlay(finalDirColor)
+    // 仍保留 day* 作为 fallback：无天气 / 边界值时 lerp 65% = 自混合，不破坏昼夜基准。
+    const weatherDirIntensity = isRain() ? 1.5 : isDrought() ? 2.7 : dayDirIntensity
+    const weatherHemiIntensity = isRain() ? 0.85 : isDrought() ? 1.25 : dayHemiIntensity
+    // 方向光最终颜色 = dayColor lerp(weatherColor, WEATHER_BLEND)
+    // weatherColor：雨天偏冷蓝、旱天偏暖橙、无天气 = 昼夜基准
+    if (isRain()) finalDirColor.set(0x6a9ab8)
+    else if (isDrought()) finalDirColor.set(0xffb878)
+    else finalDirColor.copy(_tmpDirColor)
     // dayColor (in _tmpDirColor) lerp(weatherColor, WEATHER_BLEND) -> 结果写回 _tmpDirColor
     _tmpDirColor.lerp(finalDirColor, WEATHER_BLEND)
 
-    const finalDirIntensity = dayDirIntensity + (weatherDirI - dayDirIntensity) * WEATHER_BLEND
-    const finalHemiIntensity = dayHemiIntensity + (weatherHemiI - dayHemiIntensity) * WEATHER_BLEND
+    const finalDirIntensity = dayDirIntensity + (weatherDirIntensity - dayDirIntensity) * WEATHER_BLEND
+    const finalHemiIntensity = dayHemiIntensity + (weatherHemiIntensity - dayHemiIntensity) * WEATHER_BLEND
 
     const k = 1 - Math.exp(-DAY_NIGHT.k * Math.min(dt, 0.1))
     if (dir.current) {
@@ -402,41 +404,9 @@ const getDayNightHemiSkyColor = (target: Color, hour: number): Color => {
   return target.set(0x4a5a78) // 夜间：冷蓝
 }
 
-// P2-6 天气氛围：按 forecast.kind 查表，每种天气给一个 sky/light overlay
-// 老的 SKY_RAIN_OVERLAY / SKY_DROUGHT_OVERLAY 由 forecast 表统一替代
-const WEATHER_OVERLAYS: Record<WeatherKind, Color> = {
-  sunny: new Color(0xfff0d0),     // 暖白
-  cloudy: new Color(0xc8d0d8),    // 浅灰
-  overcast: new Color(0x9ba8b8),  // 深灰
-  lightRain: new Color(0x9fb4c4), // 浅蓝（兼容旧值）
-  heavyRain: new Color(0x6a8aa8), // 深蓝
-  thunder: new Color(0x5a6a88),   // 雷雨灰蓝
-}
-const DROUGHT_OVERLAY = new Color(0xe0c98d)
-
-// 方向光强度按 isRain/isDrought 决定；非雨用 day 基准
-function weatherDirIntensity(dayIntensity: number): number {
-  if (isRain()) return 1.5
-  if (isDrought()) return 2.7
-  return dayIntensity
-}
-
-function weatherHemiIntensity(dayIntensity: number): number {
-  if (isRain()) return 0.85
-  if (isDrought()) return 1.25
-  return dayIntensity
-}
-
-function currentWeatherOverlay(target: Color): void {
-  if (isRain()) {
-    const kind = getTodayForecast().kind
-    target.copy(WEATHER_OVERLAYS[kind])
-  } else if (isDrought()) {
-    target.copy(DROUGHT_OVERLAY)
-  } else {
-    target.copy(WEATHER_OVERLAYS[getTodayForecast().kind])
-  }
-}
+// P1-6 天气氛围：天空/雾色以昼夜为基准，天气色偏叠加 35% 权重
+const SKY_RAIN_OVERLAY = new Color(0x9fb4c4)
+const SKY_DROUGHT_OVERLAY = new Color(0xe0c98d)
 
 function WeatherMood() {
   const scene = useThree((s) => s.scene)
@@ -450,8 +420,10 @@ function WeatherMood() {
 
     // daySky = 昼夜基准（in-place）
     getDayNightSky(daySky, hour)
-    // weather overlay：按 forecast.kind / 干旱 派生
-    currentWeatherOverlay(target)
+    // weather overlay：雨天 / 旱天 / 无天气 = 用 daySky 自己（lerp WEATHER_BLEND）
+    if (isRain()) target.copy(SKY_RAIN_OVERLAY)
+    else if (isDrought()) target.copy(SKY_DROUGHT_OVERLAY)
+    else target.copy(daySky)
     // daySky lerp(target, WEATHER_BLEND) -> 结果写回 daySky
     daySky.lerp(target, WEATHER_BLEND)
 
