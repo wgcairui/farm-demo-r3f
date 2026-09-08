@@ -1,13 +1,23 @@
-// D6 试玩反馈落地：惊喜事件（下雨/干旱/害虫）+ 施肥工具 + 作物差异化。
-// 设计原则：整个系统活在 React 之外（模块单例，同 effects.ts）——
+// D6 试玩反馈落地 + P2-6 春季日历接入：
+// 旧版"惊喜事件（下雨/干旱/害虫）+ 施肥工具 + 作物差异化"系统活在 React 之外（模块单例）。
 // 生长偏移逐帧累加零重渲染，HUD 横幅/浮字走命令式 DOM。
 // 时间模型仍是 packages/game 的 plantedAt 时间戳：事件不改游戏规则，
 // 只改"有效生长进度"（bonusMs），stageOf/progressOf 拿到的依旧是一个纯时间戳，
 // 与服务端方案的同构叙事不被破坏。
+//
+// P2-6 改造要点：
+//   - 移除瞬时随机（RAIN_MS / ROLL_EVERY_MS / FIRST_EVENT_MS / ROLL_CHANCE 等）
+//   - isRain / isDrought 改为派生：读 forecast 表 + 干旱涌现判定
+//   - tickEvents 只负责 bonusMs 累加，不再调度事件
+//   - banner 文案按 forecast.kind 区分（晴/多云/阴/小雨/大雨/雷/干旱/害虫）
+//   - pest 保留原随机触发，但虫害地块权重叠加 pestCalendar.getMonthPestWeight()
 import { CROPS, PLOT_COUNT, tickPlot, type CropId, type Plot, type PlotState, WITHER_RECOVER_MS } from '@farm/game'
+import { getTodayForecast, getIsDrought, getForecast, type WeatherKind } from './forecast'
+import { getMonthPestWeight } from './pestCalendar'
 import { queueFloater } from './floaters'
 import { plotPosition } from './layout'
 import { playDamage, playDrought, playPest, playRain } from './sfx'
+import { getGameDay } from './time'
 
 export type EventType = 'rain' | 'drought' | 'pest'
 
@@ -15,13 +25,6 @@ export type EventType = 'rain' | 'drought' | 'pest'
 export const FERT_COST = 5
 /** 害虫出现到得逞的宽限时长 */
 export const PEST_TTL_MS = 12_000
-
-const RAIN_MS = 15_000
-const DROUGHT_MS = 20_000
-/** 调度器轮询间隔与概率：开局 20s 安静期让玩家学会基本操作 */
-const ROLL_EVERY_MS = 5_000
-const FIRST_EVENT_MS = 20_000
-const ROLL_CHANCE = 0.45
 
 /** 每块地的附加状态。bonusMs>0=进度提前（雨/肥），<0=冻结累计（干旱） */
 interface PlotFx {
@@ -45,11 +48,13 @@ export interface ActiveEvent {
 // 避免 performance.now() 帧时钟与持久化 Date.now() 时间戳混用导致侧栏/浮字/恢复计时偶尔差一拍。
 const fx = new Map<number, PlotFx>()
 let active: ActiveEvent | null = null
-let nextRollAt = Date.now() + FIRST_EVENT_MS
 /** 上一次 tick 的 Date.now：用于后台回来时按墙钟差补结算 */
 let lastTickAt: number | null = null
 let lastPlots: Plot[] = []
-let bannerKey = ''
+/** 上次写入 DOM 的 banner signature，节流避免每帧操作 */
+let lastBannerKind: string | null = null
+/** 干旱首日标记：跨日时清零 watered */
+let lastDroughtDay = -1
 let tool: 'seed' | 'fert' = 'seed'
 
 /** 附加层 bonusMs 的合法幅度上限（取最长作物全生长期的 2 倍），手工改档超界直接拒 */
@@ -129,65 +134,117 @@ export function isThirsty(crop: CropId): boolean {
 }
 
 // —— 横幅：命令式 DOM，与 floaters 同风格 ——
+// P2-6：banner 文案按 forecast.kind / 干旱天数 / pest 状态三类区分
 
-const BANNER_TEXT: Record<EventType, string> = {
-  rain: '🌧️ 下雨了！全部作物生长 ×2',
-  drought: '☀️ 干旱！🥕 耐旱 · 🌽 点击地块浇水',
-  pest: '🐛 害虫出没！点击虫子驱赶',
+const BANNER_WEATHER_TEXT: Record<WeatherKind, string> = {
+  sunny: '☀️ 晴朗',
+  cloudy: '🌤️ 多云',
+  overcast: '☁️ 阴',
+  lightRain: '🌧️ 小雨 · 作物生长 ×2',
+  heavyRain: '⛈️ 大雨 · 作物生长 ×2',
+  thunder: '⚡ 雷阵雨 · 作物生长 ×2',
 }
 
-function setBanner(ev: ActiveEvent | null, secsLeft = 0): void {
+/** 干旱持续天数（用于 banner 提示「第几天」） */
+function droughtStreak(): number {
+  const day = getGameDay()
+  let n = 0
+  for (let i = day - 1; i >= 0; i--) {
+    const f = getForecast(i)
+    if (f.kind === 'lightRain' || f.kind === 'heavyRain' || f.kind === 'thunder') break
+    n++
+    if (n >= 30) break // 上限 30 天
+  }
+  return n
+}
+
+/** 计算当前应显示的 banner signature（同一 signature 不写 DOM） */
+function currentBannerSig(nowMs: number): string {
+  if (active?.type === 'pest') {
+    const secs = Math.max(0, Math.ceil((active.endAt - nowMs) / 1000))
+    return `pest:${secs}`
+  }
+  if (getIsDrought()) {
+    return `drought:${droughtStreak()}`
+  }
+  const today = getTodayForecast()
+  if (today.kind === 'lightRain' || today.kind === 'heavyRain' || today.kind === 'thunder') {
+    return `rain:${today.kind}:day=${getGameDay()}`
+  }
+  return 'none'
+}
+
+function renderBanner(sig: string, nowMs: number): void {
+  if (sig === lastBannerKind) return
   const el = document.getElementById('event-banner')
   if (!el) return
-  if (!ev) {
-    if (bannerKey !== '') {
-      bannerKey = ''
-      el.className = ''
-    }
+  lastBannerKind = sig
+  if (sig === 'none') {
+    el.className = ''
+    el.textContent = ''
     return
   }
-  const secs = Math.max(0, Math.ceil(secsLeft / 1000))
-  const key = `${ev.type}:${secs}`
-  if (key === bannerKey) return
-  bannerKey = key
-  el.textContent = `${BANNER_TEXT[ev.type]} · ${secs}s`
-  el.className = `show ${ev.type}`
+  if (sig.startsWith('pest:')) {
+    el.textContent = `🐛 害虫出没！点击虫子驱赶 · ${sig.slice(5)}s`
+    el.className = 'show pest'
+    return
+  }
+  if (sig.startsWith('drought:')) {
+    const days = Number(sig.slice(8))
+    el.textContent = `☀️ 干旱 · 第${days}天 · 🥕 耐旱 · 🌽 点击地块浇水`
+    el.className = 'show drought'
+    return
+  }
+  if (sig.startsWith('rain:')) {
+    // sig = "rain:<kind>:day=<n>"
+    const kind = sig.split(':')[1] as WeatherKind
+    el.textContent = `${BANNER_WEATHER_TEXT[kind]} · 持续到明日`
+    el.className = 'show rain'
+    return
+  }
 }
 
 // —— 调度与逐帧推进（EventsTicker 每帧调用）——
+// P2-6：仅 pest 仍走瞬时事件；rain 由 forecast.kind 派生（isRain），drought 自动涌现（isDrought）。
 
-// RNG 注入：默认 Math.random；将来 server-side 重放可换 seeded RNG。
-// 集中一处方便后续替换为 xorshift / mulberry32 而不污染业务分支。
+// RNG 注入：仅用于 pest 选地块；可被 setRng 替换以便 server-side 重放。
 let rng: () => number = Math.random
 export function setRng(next: () => number): void {
   rng = next
 }
 
-function startEvent(type: EventType, now: number): void {
-  let plot = -1
-  if (type === 'pest') {
-    // 挑生长中的作物（空地/成熟不算）；玉米招虫（权重 ×3）
-    const w: number[] = []
-    lastPlots.forEach((p, i) => {
-      if (p.crop && !isMature(p, i)) w.push(i, ...(p.crop === 'corn' ? [i, i] : []))
-    })
-    if (w.length === 0) return
-    plot = w[Math.floor(rng() * w.length)]
-  } else {
-    // 干旱开始时浇过水的状态清零，每轮干旱都要重新照顾
-    for (const f of fx.values()) f.watered = false
-  }
+// 害虫选地块：玉米招虫（权重 ×3）× 月份系数（pestCalendar）
+function pickPestPlot(): number {
+  const w: number[] = []
+  const monthFactor = getMonthPestWeight()
+  lastPlots.forEach((p, i) => {
+    if (!p.crop || isMature(p, i)) return
+    const cropFactor = p.crop === 'corn' ? 3 : 1
+    const weight = Math.round(cropFactor * monthFactor)
+    for (let k = 0; k < weight; k++) w.push(i)
+  })
+  if (w.length === 0) return -1
+  return w[Math.floor(rng() * w.length)]
+}
+
+/** 启动一个 pest 事件 */
+function startPestEvent(now: number): boolean {
+  const plot = pickPestPlot()
+  if (plot === -1) return false
   active = {
-    type,
+    type: 'pest',
     plot,
     startAt: now,
-    endAt: now + (type === 'rain' ? RAIN_MS : type === 'drought' ? DROUGHT_MS : PEST_TTL_MS),
-    plantedAt: type === 'pest' ? (lastPlots[plot]?.plantedAt ?? null) : null,
+    endAt: now + PEST_TTL_MS,
+    plantedAt: lastPlots[plot]?.plantedAt ?? null,
   }
-  if (type === 'rain') playRain()
-  else if (type === 'drought') playDrought()
-  else playPest()
-  setBanner(active, active.endAt - now)
+  playPest()
+  return true
+}
+
+/** 进入干旱时：清零所有 watered 状态（每轮干旱需重新照顾） */
+function enterDrought(): void {
+  for (const f of fx.values()) f.watered = false
 }
 
 export function tickEvents(plots: Plot[]): void {
@@ -196,10 +253,20 @@ export function tickEvents(plots: Plot[]): void {
   lastTickAt = now
   // 墙钟差补结算：rAF 在后台标签页暂停，回来那一帧 gap 是真实间隔，一次性补齐——
   // 与生长的 Date.now() 墙钟哲学对齐，切后台不再"白嫖干旱"/白丢雨加成。
-  // 事件效果只补到 endAt 为止（后台就该结束的部分不多算）。
+  // P2-6：rain / drought 由 forecast 派生（不再走瞬时 active.endAt），
+  // evGap 仅用于 pest 倒计时内的补结算。
   const gap = prevTick === null ? 0 : Math.max(0, now - prevTick)
   const evGap = active ? Math.max(0, Math.min(now, active.endAt) - (prevTick ?? now)) : 0
   lastPlots = plots
+
+  const rain = isRain()
+  const drought = isDrought()
+
+  // 干旱边界：今日进入干旱时清零 watered
+  if (drought && lastDroughtDay !== getGameDay()) {
+    enterDrought()
+    lastDroughtDay = getGameDay()
+  }
 
   // 偏移累加：只对生长中（未成熟）的地块生效；成熟后继续累计只会堆出无意义的大数
   for (let i = 0; i < plots.length; i++) {
@@ -207,37 +274,34 @@ export function tickEvents(plots: Plot[]): void {
     if (!p.crop || isMature(p, i)) continue
     const f = ensure(i)
     if (f.fert) f.bonusMs = clampBonus(f.bonusMs + gap * 0.5)
-    if (active?.type === 'rain') f.bonusMs = clampBonus(f.bonusMs + evGap)
-    else if (active?.type === 'drought') {
-      if (p.crop === 'corn' && !f.watered) f.bonusMs = clampBonus(f.bonusMs - evGap)
-      else if (p.crop === 'carrot') f.bonusMs = clampBonus(f.bonusMs + evGap * 0.5)
+    if (rain) f.bonusMs = clampBonus(f.bonusMs + gap)
+    else if (drought) {
+      if (p.crop === 'corn' && !f.watered) f.bonusMs = clampBonus(f.bonusMs - gap)
+      else if (p.crop === 'carrot') f.bonusMs = clampBonus(f.bonusMs + gap * 0.5)
     }
   }
 
-  if (active) {
+  // pest 倒计时收尾
+  if (active?.type === 'pest') {
     if (now >= active.endAt) {
-      // 超时减产校验 plantedAt：虫害期间目标被收获再补种，惩罚不能落到新茬头上
       const target = plots[active.plot]
-      if (active.type === 'pest' && target?.crop && target.plantedAt === active.plantedAt) {
+      if (target?.crop && target.plantedAt === active.plantedAt) {
         ensure(active.plot).dmg = true
         const [x, z] = plotPosition(active.plot)
         queueFloater(x, 0.7, z, '🐛 叶子被啃 · 减产一半')
         playDamage()
       }
       active = null
-      nextRollAt = now + ROLL_EVERY_MS
-      setBanner(null)
       flush()
-    } else {
-      setBanner(active, active.endAt - now)
     }
-  } else if (now >= nextRollAt) {
-    if (rng() < ROLL_CHANCE) {
-      const r = rng()
-      startEvent(r < 0.4 ? 'rain' : r < 0.75 ? 'drought' : 'pest', now)
-    }
-    if (!active) nextRollAt = now + ROLL_EVERY_MS
   }
+
+  // banner 渲染（按日 / pest 倒计时统一签名节流）
+  const sig = currentBannerSig(now)
+  renderBanner(sig, now)
+
+  // 暴露 __farmEvent 也可继续触发 pest（演示现场）
+  void evGap
 }
 
 // —— 玩家侧动作 ——
@@ -270,8 +334,6 @@ export function consumePest(): number {
   if (active?.type !== 'pest') return -1
   const plot = active.plot
   active = null
-  nextRollAt = Date.now() + ROLL_EVERY_MS
-  setBanner(null)
   return plot
 }
 
@@ -330,8 +392,12 @@ export const setTool = (t: 'seed' | 'fert'): void => {
   tool = t
 }
 export const getActive = (): ActiveEvent | null => active
-export const isRain = (): boolean => active?.type === 'rain'
-export const isDrought = (): boolean => active?.type === 'drought'
+// P2-6：isRain / isDrought 由 forecast 派生（不再依赖 active）
+export const isRain = (): boolean => {
+  const k = getTodayForecast().kind
+  return k === 'lightRain' || k === 'heavyRain' || k === 'thunder'
+}
+export const isDrought = (): boolean => getIsDrought()
 export function getBonus(i: number): number {
   return fx.get(i)?.bonusMs ?? 0
 }
@@ -340,6 +406,7 @@ export function getFx(i: number): Readonly<PlotFx> | undefined {
 }
 
 // —— 演示/测试钩子：强制触发事件（面试现场演示、playwright 验证都用它）——
+// P2-6：rain/drought 由 forecast 派生，不再支持；仅保留 pest。
 
 declare global {
   interface Window {
@@ -350,12 +417,15 @@ declare global {
 }
 if (typeof window !== 'undefined') {
   window.__farmEvent = (type) => {
-    // 已有事件先无伤结束，保证演示确定性
+    // 已有 pest 先无伤结束，保证演示确定性
     if (active) {
       active = null
-      setBanner(null)
     }
-    startEvent(type, Date.now())
+    if (type === 'pest') {
+      startPestEvent(Date.now())
+    }
+    // rain / drought 演示路径：提示调用方改用 __farmTime.fastForward() 或 console.log
+    void type
   }
   window.__farmDebug = () => ({ active, fx: [...fx.entries()] })
 }
