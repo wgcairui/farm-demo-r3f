@@ -99,21 +99,19 @@ function drawSky(ctx: CanvasRenderingContext2D, cssW: number, cssH: number): voi
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, cssW, cssH)
 
-  // 3 朵云朵（白色椭圆叠加），慢飘
-  const cloudY = 70
+  // 3 朵云朵（白色椭圆叠加），慢飘，放在 HUD TopBar 下方
+  // TopBar 高 ~52px，所以云从 y=88 开始
+  const cloudYBase = 110
   const cloudConfigs = [
-    { x0: 100, scale: 1.0 },
-    { x0: 350, scale: 0.8 },
-    { x0: 600, scale: 1.1 },
+    { x0: 100, scale: 1.0, yOffset: 0 },
+    { x0: 380, scale: 0.8, yOffset: 18 },
+    { x0: 700, scale: 1.1, yOffset: -10 },
   ]
   const wrap = cssW + 200
   for (const cfg of cloudConfigs) {
     const x = ((cfg.x0 + cloudOffset * (cfg.scale * 8)) % wrap) - 100
-    drawCloud(ctx, x, cloudY, cfg.scale)
+    drawCloud(ctx, x, cloudYBase + cfg.yOffset, cfg.scale)
   }
-  // 顶部留 TopBar 区域（80px）不要画云
-  ctx.fillStyle = '#9CCC65'
-  ctx.fillRect(0, 0, cssW, 60)
 }
 
 /** rAF 主循环每帧调用一次，推进云朵偏移 */

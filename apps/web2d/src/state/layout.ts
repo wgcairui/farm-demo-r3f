@@ -2,7 +2,7 @@
 // 索引与 packages/game 的 plots 数组下标一一对应，D2 接逻辑时直接用。
 export const PLOT_ROWS = 2
 export const PLOT_COLS = 3
-export const PLOT_GAP = 1.2
+export const PLOT_GAP = 1.0
 
 /** 两组地块的世界原点偏移（避免与 cottage / trees / fence 重叠） */
 export const PLOT_GROUP_ORIGINS: [number, number][] = [

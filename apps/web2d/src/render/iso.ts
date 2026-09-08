@@ -8,14 +8,14 @@
 //
 // 高度（作物成长、浮字）走 sy 偏移：heightPx 是垂直方向的"像素高度"，加到 sy 上等于抬高。
 
-export const TILE_W = 64
-export const TILE_H = 32
+export const TILE_W = 88
+export const TILE_H = 44
 
 /** 高度 1 单位对应的像素（sy 方向） */
 export const Y_PER_UNIT = 16
 
 /** tile 圆角半径（视觉接近 QQ 农场截图） */
-export const TILE_RADIUS = 5
+export const TILE_RADIUS = 6
 
 export interface Vec2 {
   x: number
