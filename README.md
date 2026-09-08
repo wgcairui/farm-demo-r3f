@@ -52,7 +52,7 @@ farm-demo/
 - **架构红线不破**：事件不改游戏规则，只改"有效生长时间戳"（bonusMs 偏移），`stageOf/progressOf` 拿到的仍是纯时间戳，服务端同构叙事成立；`packages/game` 零 diff 保持。
 - **墙钟补结算**：事件累加按帧间真实间隔（rAF 后台暂停，回前台一帧一次性补齐，且只补到事件 endAt）——切后台躲不掉干旱、也不白丢雨加成，与生长的 Date.now() 墙钟哲学一致。
 - 附加状态（偏移/施肥/减产/浇水）存独立 localStorage 键 `farm-demo-extras-v1`，主存档仍归 game 包管。已知限制：多标签页同开时附加层 last-writer-wins（主存档同样如此，demo 范围不处理）。
-- 演示/测试钩子：`__farmEvent('rain'|'drought'|'pest')` 强制触发事件（面试现场演示可控），`__farmDebug()` 读内部状态。
+- 演示/测试钩子：P2-7 起日历事件派生自 forecast，`__farmEvent` 仅保留 `__farmEvent('pest')` 触发虫害；日历推进用 `__farmTime.fastForward(n)` / `jumpToGameDay(d)` / `jumpToNextRain()`；`__farmDebug()` 读内部状态。
 
 ## D6 试玩反馈第一轮（2026-09-06）
 
@@ -68,7 +68,7 @@ farm-demo/
 - **架构红线不破**：事件不改游戏规则，只改"有效生长时间戳"（bonusMs 偏移），`stageOf/progressOf` 拿到的仍是纯时间戳，服务端同构叙事成立；`packages/game` 零 diff 保持。
 - **墙钟补结算**：事件累加按帧间真实间隔（rAF 后台暂停，回前台一帧一次性补齐，且只补到事件 endAt）——切后台躲不掉干旱、也不白丢雨加成，与生长的 Date.now() 墙钟哲学一致。
 - 附加状态（偏移/施肥/减产/浇水）存独立 localStorage 键 `farm-demo-extras-v1`，主存档仍归 game 包管。已知限制：多标签页同开时附加层 last-writer-wins（主存档同样如此，demo 范围不处理）。
-- 演示/测试钩子：`__farmEvent('rain'|'drought'|'pest')` 强制触发事件（面试现场演示可控），`__farmDebug()` 读内部状态。
+- 演示/测试钩子：P2-7 起日历事件派生自 forecast，`__farmEvent` 仅保留 `__farmEvent('pest')` 触发虫害；日历推进用 `__farmTime.fastForward(n)` / `jumpToGameDay(d)` / `jumpToNextRain()`；`__farmDebug()` 读内部状态。
 
 ## 部署
 

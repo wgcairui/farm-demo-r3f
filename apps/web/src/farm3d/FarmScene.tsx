@@ -26,6 +26,7 @@ import {
   tickPlotStates,
 } from './events'
 import { getTodayForecast, type WeatherKind } from './forecast'
+import { getNow } from './time'
 import {
   consumeShake,
   getLeafs,
@@ -524,7 +525,8 @@ function PlotView({ index, groupIdx, crop, plantedAt, state, hint, onPlot, make 
       base = 0.85
       wasMatureRef.current = false
     } else if (crop && plantedAt !== null) {
-      const t = ease.clamp01(progressOf({ crop, plantedAt: plantedAt - getBonus(index), state, witheredAt: null }, Date.now()))
+      // P2-7：用 getNow() 而非 Date.now()，让快进偏移立即影响生长进度
+      const t = ease.clamp01(progressOf({ crop, plantedAt: plantedAt - getBonus(index), state, witheredAt: null }, getNow()))
       // 成熟瞬间的一次弹跳（D5：可收获信号）
       if (t >= 1 && !wasMatureRef.current) matureBounceAtRef.current = now
       wasMatureRef.current = t >= 1
@@ -655,7 +657,8 @@ function CountdownFloater({
   useFrame(() => {
     const def = CROPS[crop]
     const total = def.stageMs[0] + def.stageMs[1]
-    const remain = Math.max(0, plantedAt + total - Date.now() + getBonus(index))
+    // P2-7：用 getNow() 让倒计时显示随快进跳跃
+    const remain = Math.max(0, plantedAt + total - getNow() + getBonus(index))
     const mature = remain <= 0
     // 节流：每秒最多投递一次新浮字（mature 同样限流，否则"✨ 可收获"会按帧堆栈）
     const now = performance.now()
@@ -1054,7 +1057,8 @@ function WitheredRecoverHint({ plots, groupIdx }: { plots: SaveData['plots']; gr
     for (let i = 0; i < plots.length; i++) {
       const p = plots[i]
       if (p.state !== 'withered') continue
-      const secs = getPlotStateRecoveryMs(i, Date.now(), plots)
+      // P2-7：用 getNow() 让 withered 恢复倒计时随快进跳跃
+      const secs = getPlotStateRecoveryMs(i, getNow(), plots)
       if (secs <= 0) continue
       const [px, pz] = plotPosition(i, groupIdx)
       lastShownAtRef.current = now
@@ -1074,9 +1078,9 @@ function PlotStateTicker({ plots, onTickPlots }: { plots: SaveData['plots']; onT
   const lastCheckRef = useRef(0)
 
   useFrame(() => {
-    // 节流与推进用同一个时钟（Date.now）：之前用 perf 节流 + Date.now 推进，
-    // 两套时钟起步点不同导致节流粒度与"8s 自动恢复"判定偶发错位一拍。
-    const now = Date.now()
+    // P2-7：用 getNow()（游戏时间）作为节流与推进的基准——快进后节流立即触发，
+    // withered 状态机在游戏时间线上推进，与作物进度同步。
+    const now = getNow()
     if (now - lastCheckRef.current < 1000) return
     lastCheckRef.current = now
     const next = tickPlotStates(plots, now)

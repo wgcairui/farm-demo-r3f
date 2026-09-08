@@ -11,13 +11,13 @@
 //   - tickEvents 只负责 bonusMs 累加，不再调度事件
 //   - banner 文案按 forecast.kind 区分（晴/多云/阴/小雨/大雨/雷/干旱/害虫）
 //   - pest 保留原随机触发，但虫害地块权重叠加 pestCalendar.getMonthPestWeight()
-import { CROPS, PLOT_COUNT, tickPlot, type CropId, type Plot, type PlotState, WITHER_RECOVER_MS } from '@farm/game'
+import { CROPS, PLOT_COUNT, stageOf, tickPlot, type CropId, type Plot, type PlotState, WITHER_RECOVER_MS } from '@farm/game'
 import { getTodayForecast, getIsDrought, getForecast, type WeatherKind } from './forecast'
 import { getMonthPestWeight } from './pestCalendar'
 import { queueFloater } from './floaters'
 import { plotPosition } from './layout'
 import { playDamage, playDrought, playPest, playRain } from './sfx'
-import { getGameDay } from './time'
+import { getGameDay, getNow } from './time'
 
 export type EventType = 'rain' | 'drought' | 'pest'
 
@@ -53,6 +53,8 @@ let lastTickAt: number | null = null
 let lastPlots: Plot[] = []
 /** 上次写入 DOM 的 banner signature，节流避免每帧操作 */
 let lastBannerKind: string | null = null
+/** 上一次 tick 的游戏时间戳（getNow）；用于计算「游戏时间差」以让快进生效 */
+let lastGameNow: number | null = null
 /** 干旱首日标记：跨日时清零 watered */
 let lastDroughtDay = -1
 /** 雨日首日标记：跨日时播 playRain() 一次 */
@@ -125,7 +127,10 @@ export function effPlot(p: Plot, i: number): Plot {
 function isMature(p: Plot, i: number): boolean {
   if (!p.crop || p.plantedAt === null) return false
   const def = CROPS[p.crop]
-  return Date.now() - (p.plantedAt - (fx.get(i)?.bonusMs ?? 0)) >= def.stageMs[0] + def.stageMs[1]
+  // P2-7：用 getNow() 而非 Date.now()，让快进偏移生效
+  // plantedAt 是写入时刻的绝对时间戳（Date.now()），getNow() 已叠加快进偏移，
+  // 所以快进 N 天后这里的「now - plantedAt」直接等于「真实经过 + N 天」。
+  return getNow() - (p.plantedAt - (fx.get(i)?.bonusMs ?? 0)) >= def.stageMs[0] + def.stageMs[1]
 }
 
 // —— 作物差异化：唯一的规则出处，UI 标签与事件逻辑都引用它 ——
@@ -251,14 +256,20 @@ function enterDrought(): void {
 
 export function tickEvents(plots: Plot[]): void {
   const now = Date.now()
+  const gameNow = getNow()
   const prevTick = lastTickAt
+  const prevGameNow = lastGameNow
   lastTickAt = now
+  lastGameNow = gameNow
   // 墙钟差补结算：rAF 在后台标签页暂停，回来那一帧 gap 是真实间隔，一次性补齐——
   // 与生长的 Date.now() 墙钟哲学对齐，切后台不再"白嫖干旱"/白丢雨加成。
   // P2-6：rain / drought 由 forecast 派生（不再走瞬时 active.endAt），
   // evGap 仅用于 pest 倒计时内的补结算。
   const gap = prevTick === null ? 0 : Math.max(0, now - prevTick)
   const evGap = active ? Math.max(0, Math.min(now, active.endAt) - (prevTick ?? now)) : 0
+  // P2-7：gameGap 用游戏时间（已叠加快进偏移）。快进 N 天后，下一帧 gameGap ≈ N×MS_PER_DAY，
+  // 雨加成 / 干旱扣减一次性补齐——作物"同步推进"。
+  const gameGap = prevGameNow === null ? 0 : Math.max(0, gameNow - prevGameNow)
   lastPlots = plots
 
   const rain = isRain()
@@ -278,15 +289,16 @@ export function tickEvents(plots: Plot[]): void {
   }
 
   // 偏移累加：只对生长中（未成熟）的地块生效；成熟后继续累计只会堆出无意义的大数
+  // P2-7：用 gameGap（游戏时间差）而非 gap（墙钟差），让快进偏移立即生效。
   for (let i = 0; i < plots.length; i++) {
     const p = plots[i]
     if (!p.crop || isMature(p, i)) continue
     const f = ensure(i)
-    if (f.fert) f.bonusMs = clampBonus(f.bonusMs + gap * 0.5)
-    if (rain) f.bonusMs = clampBonus(f.bonusMs + gap)
+    if (f.fert) f.bonusMs = clampBonus(f.bonusMs + gameGap * 0.5)
+    if (rain) f.bonusMs = clampBonus(f.bonusMs + gameGap)
     else if (drought) {
-      if (p.crop === 'corn' && !f.watered) f.bonusMs = clampBonus(f.bonusMs - gap)
-      else if (p.crop === 'carrot') f.bonusMs = clampBonus(f.bonusMs + gap * 0.5)
+      if (p.crop === 'corn' && !f.watered) f.bonusMs = clampBonus(f.bonusMs - gameGap)
+      else if (p.crop === 'carrot') f.bonusMs = clampBonus(f.bonusMs + gameGap * 0.5)
     }
   }
 
@@ -329,8 +341,9 @@ export function tryFertilize(i: number, coins: number): FertResult {
 }
 
 /** 干旱中点击缺水的玉米浇水；胡萝卜不需要 */
+// P2-7：active 不再承担干旱状态（active 仅 pest），改读 isDrought()
 export function tryWater(i: number, crop: CropId): boolean {
-  if (active?.type !== 'drought' || !isThirsty(crop)) return false
+  if (!isDrought() || !isThirsty(crop)) return false
   const f = ensure(i)
   if (f.watered) return false
   f.watered = true
@@ -363,21 +376,34 @@ export function isDamaged(i: number): boolean {
 
 /**
  * 推动所有 withered 地块的状态机。
- * 如果某地块从 withered 转为 empty，同步清除事件附加层（fx.delete）。
- * 返回新 plots 数组（仅当有 transition 时）；否则返回 null 让调用方跳过 setData。
+ * 同时按时间戳推进播种后的 sown/sprout/growing/mature——handlePlot 的主事实源是
+ * plot.state，没有这条线 plot.state 会永远卡在播种时写入的 'sown'，
+ * 视觉成熟（progressOf / mature 弹跳）正常但点击仍走 sown 分支，表现为"点成熟作物没反应"。
+ * 如果有任何 transition，返回新 plots 数组；否则返回 null 让调用方跳过 setData。
  */
 export function tickPlotStates(plots: Plot[], now: number): Plot[] | null {
   let changed = false
   const next = plots.map((p, i) => {
-    if (p.state !== 'withered') return p
-    const next = tickPlot(p, now)
-    // withered → empty 转换：清除事件附加层，避免恢复后还带减产/加成
-    if (next.state === 'empty') {
-      fx.delete(i)
-      flush()
-      changed = true
+    if (p.state === 'withered') {
+      const next = tickPlot(p, now)
+      // withered → empty 转换：清除事件附加层，避免恢复后还带减产/加成
+      if (next.state === 'empty') {
+        fx.delete(i)
+        flush()
+        changed = true
+      }
+      return next
     }
-    return next
+    // 生长中地块：用 effPlot（事件偏移后的等效播种时刻）+ stageOf 派生当前阶段，
+    // 与 derive 阶段的哲学一致；state 不一致就推进，调用方只关心是否要 setData。
+    if (p.crop && p.plantedAt !== null) {
+      const derived = stageOf(effPlot(p, i), now)
+      if (derived !== p.state) {
+        changed = true
+        return { ...p, state: derived }
+      }
+    }
+    return p
   })
   return changed ? next : null
 }
@@ -402,11 +428,26 @@ export const setTool = (t: 'seed' | 'fert'): void => {
 }
 export const getActive = (): ActiveEvent | null => active
 // P2-6：isRain / isDrought 由 forecast 派生（不再依赖 active）
-export const isRain = (): boolean => {
-  const k = getTodayForecast().kind
-  return k === 'lightRain' || k === 'heavyRain' || k === 'thunder'
+// P2-7 性能：useFrame hot path 每帧可能调用 6+ 次；缓存到跨 gameDay 失效。
+let cachedWeatherDay = -1
+let cachedRain = false
+let cachedDrought = false
+function refreshWeatherCache(): void {
+  const d = getGameDay()
+  if (d === cachedWeatherDay) return
+  cachedWeatherDay = d
+  const f = getTodayForecast()
+  cachedRain = f.kind === 'lightRain' || f.kind === 'heavyRain' || f.kind === 'thunder'
+  cachedDrought = getIsDrought()
 }
-export const isDrought = (): boolean => getIsDrought()
+export const isRain = (): boolean => {
+  refreshWeatherCache()
+  return cachedRain
+}
+export const isDrought = (): boolean => {
+  refreshWeatherCache()
+  return cachedDrought
+}
 export function getBonus(i: number): number {
   return fx.get(i)?.bonusMs ?? 0
 }
