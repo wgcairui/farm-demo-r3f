@@ -1,6 +1,6 @@
 # farm-demo
 
-「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线零 diff——D7 主动破例重构，理由见 PROGRESS.md）。当前进度：**Phase 1 D1~D12 已完成，Web 版已部署并验证；Phase 2 RN 移植按用户决定暂缓；新增第三渲染壳 `apps/minigame`（Cocos Creator 微信小游戏），M1 单场景原型已跑通本地编译**；详细 D 级轨迹见 [PROGRESS.md](PROGRESS.md)，验收勾选见 [docs/PRD.md](docs/PRD.md)，小游戏移植设计见 [docs/MINIGAME.md](docs/MINIGAME.md)。
+「开心农场」多壳重制：**Three.js + RN + Cocos + Canvas2D** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线零 diff——D7 主动破例重构，理由见 PROGRESS.md）。当前进度：**Phase 1 D1~D12 已完成，Web 版已部署并验证；Phase 2 RN 移植按用户决定暂缓；新增第三渲染壳 `apps/minigame`（Cocos Creator 微信小游戏，M1 单场景原型已跑通本地编译）；新增第四渲染壳 `apps/web2d`（Canvas2D 俯视等距 QQ 农场风味，1:1 复刻机制）**；详细 D 级轨迹见 [PROGRESS.md](PROGRESS.md)，验收勾选见 [docs/PRD.md](docs/PRD.md)，小游戏移植设计见 [docs/MINIGAME.md](docs/MINIGAME.md)。
 
 详细计划见 [docs/PRD.md](docs/PRD.md)，资产清单与授权见 [packages/assets/ASSETS.md](packages/assets/ASSETS.md)。
 
@@ -11,10 +11,15 @@ farm-demo/
 ├── apps/web/        # Web 3D 原型（Vite + React 19 + R3F）— Phase 1 D1~D5 完成 + D6 反馈轮
 │   └── src/farm3d/  # gltf 资产管线 / motion 动画规范 / effects 特效 / sfx 合成音效
 │                    # events 事件系统（雨/旱/虫/施肥，React 外单例） / clickGuard / layout / useFarm / FarmScene
+├── apps/web2d/      # Web 2D 壳（Vite + React 19 + Canvas2D 俯视等距）— Phase 2D
+│   └── src/
+│       ├── render/  # iso.ts（2:1 等距投影）/ sprites.ts（程序化 sprite 绘制）/ Scene2D.tsx / particles.ts / floaters.ts / loop.ts
+│       ├── state/   # useFarm.ts（业务壳，import 指向本地）/ events/time/sfx/combo/tutorial/decorations 等（与 web 版同源拷贝）
+│       └── hooks/   # （预留）
 ├── apps/mobile/     # RN 版（Expo SDK 57 + expo-gl）— Phase 0 hello-cube 跑通（模拟器 ~20fps），Phase 2 移植目标（暂缓）
 ├── apps/minigame/   # Cocos Creator 微信小游戏（M1 本地编译通过，待编辑器组场景 + 真机调试）
-├── packages/game/   # 游戏数值与状态机（纯 TS，三端共享，服务端同构；对基线零 diff，仅 load/save 加可选 backend 注入点）
-├── packages/assets/ # CC0 3D 模型（glTF，poly.pizza/Quaternius）+ 授权记录
+├── packages/game/   # 游戏数值与状态机（纯 TS，四端共享，服务端同构；对基线零 diff，仅 load/save 加可选 backend 注入点）
+├── packages/assets/ # CC0 3D 模型（glTF，poly.pizza/Quaternius）+ 授权记录（web2d 不引用，纯 3D 用）
 ├── scripts/         # patch-ios27-scene.sh（expo prebuild 后必跑）
 └── docs/            # PRD / MINIGAME（含验收清单勾选进度）
 ```
@@ -39,6 +44,7 @@ farm-demo/
 | Phase 3 移动优先重做（iPhone 15） | ✅ 完成 | web 端 iOS HIG + Linear 风重做：TopBar/BottomBar 二分（44pt + 58pt）；种子栏缩为 3 颗 pill（🥕🌽🧪，价格 badge）+ 工具按钮（🏠🔇↺，↺ 长按 1s 防误触）；新增 `BottomSheet` iOS 抽屉承载天气/种子详情/摆件/教程；相机 FOV 52→48、距离收窄适配 portrait；deco 网格避让 HUD；`packages/game` 仍零 diff |
 | Phase 2 RN 移植（9/13~） | ⏸ 暂缓 | 按用户决定暂不移植，Web 版作为当前面试演示交付物 |
 | 微信小游戏 M1 单场景原型（9/8） | ✅ 本地编译通过 | `apps/minigame/` + Cocos Creator 3.8.x + 2D；6 块地 + 种子栏 + 金币 HUD + 种/收循环；`packages/game` load/save 加可选 backend 注入（向后兼容，web 端零改动，diff 11 行）；esbuild 预编译 game 包 + minigame 入口到 `assets/scripts/`（4.3kb + 10.9kb）；待 Cocos 编辑器组场景 + 微信开发者工具真机调试 |
+| Phase 2D Canvas2D 俯视等距壳（9/8） | ✅ 单壳跑通 + 全量机制复刻 | `apps/web2d/` + Vite + React 19 + 单 `<canvas>` + 2:1 等距投影；新写 `render/` 层（iso/sprites/Scene2D/particles/floaters/loop 共 ~750 行）+ `state/tickLoop.ts`（rAF 主循环 1:1 替换 useFrame）；复用 `apps/web/src/farm3d/` 的 events/time/sfx/combo/tutorial/decorations 等渲染无关模块（~1600 行零修改）；`packages/game` 仍零 diff；build 产物 234KB / gzip 74KB（对比 web 版的 1.2MB 缩减 5x）；丢弃 GLB 模型，所有美术程序化绘制（地块/作物/害虫/仓库/树/狗/池塘/石板路/围栏/4 种摆件）；HUD（TopBar/BottomBar/BottomSheet/hints/tutorial/deco-grid/float-root）从 web 版原样复用；部署走 `vercel-2d.json` + `apps/web2d/Dockerfile`（独立 nginx 镜像，与 web 同结构）；按 PRD §6「Phase 2D」段规则 |
 | 微信小游戏 M2/M3 | ⬜ 未开始 | 全功能 P1 复刻 / P2 系统（天气/害虫/摆件）复刻，见 `docs/MINIGAME.md` §6 |
 | Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
 

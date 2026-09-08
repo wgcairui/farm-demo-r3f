@@ -276,6 +276,63 @@ cc + Docker 自建链路 2026-09-06 22:43 UTC+8 已下线（game.ladishb.com 现
 
 ---
 
+## Phase 2D：Canvas2D 俯视等距壳（apps/web2d/）✅ 完成（2026-09-08）
+
+新增第四渲染壳：与 web/minigame/mobile 并列，共享 `packages/game`，**零 diff**。
+
+**目标**：把「同一套游戏逻辑跑不同渲染层」这件事用最直观的视觉风格（QQ 农场俯视等距）再落地一遍，作为面试演示的"第二条叙事线"。
+
+### D2D-1 骨架与依赖
+
+- 新建 `apps/web2d/`：Vite + React 19 + TypeScript ^7.0.2；deps `@farm/game` + `react@19.2.3` + `react-dom@19.2.3`（与 web/mobile 同版本，workspaces 自动识别）
+- **不加 three / @react-three/fiber / Phaser / PixiJS / Kaboom**；2D 用原生 Canvas2D 原语
+- `tsc --noEmit + vite build` 双端通过；产物 234KB / gzip 74KB（对比 web 版 1.2MB 缩减 5x）
+
+### D2D-2 复用层搬运
+
+- 直接 copy `apps/web/src/farm3d/{events,time,sfx,combo,tutorial,decorations,clickGuard,motion,landState,pestCalendar,forecast,layout}` 到 `apps/web2d/src/state/`（events.ts 改一行 import 路径）
+- `useFarm.ts` 复制后改 import 指向 `render/particles` `render/floaters` `state/cameraMotion`（本地 2D 版本）
+- 渲染无关模块 100% 复用零修改（约 1600 行）
+
+### D2D-3 渲染层
+
+- `render/iso.ts` (60 行)：2:1 tile 等距投影，世界↔屏幕双向投影 + 菱形 hit-test
+- `render/sprites.ts` (~400 行)：程序化绘制——地块 5 状态、作物 5 阶段（sown 小点 / sprout 2 叶 / growing 渐变叶 / mature 完整胡萝卜+玉米 / withered 残茬）、仓库/小屋/池塘/树/狗/狗屋/石板路/围栏、4 种摆件（风车/稻草人/木桶/栅栏）、害虫
+- `render/Scene2D.tsx` (~100 行)：单 `<canvas>` + DPR 适配 + ResizeObserver + 6 块地点击命中
+- `render/loop.ts` (~70 行)：拆出 renderFrame/advancePlots/advanceEvents 避免 Scene2D↔tickLoop 循环依赖
+- `state/tickLoop.ts` (~120 行)：rAF 主循环——dt 封顶、tickPlotStates、tickEvents、updateParticles、tickFloaters、camera viewScale lerp、shake translate
+- `render/particles.ts` (~150 行)：单例粒子池，shockwave/leaf/coin/rain 4 种；shake offset 暴露给 rAF 消费
+- `render/floaters.ts` (~90 行)：iso 投影 + DOM `<span>` 挂 #float-root，替代 web 版 Three 投影
+- `state/cameraMotion.ts` (~40 行)：收获 push 600ms outCubic zoom（0→0.82→1），rAF 消费
+- `state/canvasRegistry.ts` (~15 行)：canvas origin 注册（floaters 读）
+
+### D2D-4 HUD 适配
+
+- `App.tsx` (310 行)：照搬 web 版 HUD 全部 DOM 层（TopBar/BottomBar/BottomSheet/hints/tutorial/seedbar/deco-picker/deco-grid/float-root/event-banner/combo-flash），唯一替换：`<Canvas>+<FarmScene>` → `<Scene2D>`
+- `App.css` (~770 行)：原样复用，仅追加 `.scene2d-canvas` class 让 canvas 背景走草地绿而非 web 版的米白
+- `BottomSheet.tsx` (84 行) + `WeatherForecast.tsx` (134 行)：直接 copy，零改动
+
+### D2D-5 部署基建
+
+- `apps/web2d/Dockerfile`：node:24-alpine builder → nginx:alpine runtime，与 web 版同结构；独立镜像 `farm-demo-web2d:latest`
+- `apps/web2d/nginx.conf`：复用 web 版（COPY 自 apps/web）
+- `vercel-2d.json`（仓库根）：Vercel 第二项目配置，`buildCommand` 指向 `apps/web2d`，与 `vercel.json`（web）独立部署
+
+### D2D 验收
+
+- ✅ `packages/game` 仍零 diff（自检 `git diff --stat packages/game/` 只有 main 上游 P2-7 review fix 的 11 行）
+- ✅ web 版 build 不破坏（941KB three chunk + react-vendor + index = 1.2MB 不变）
+- ✅ web2d build 234KB / gzip 74KB
+- ✅ 双端 tsc --noEmit 静默通过
+- ✅ dev server 启动 `HTTP 200`（localhost:5174）
+- ✅ README 进度表 + AGENTS.md Phase 2D 段同步
+
+### D2D 已知/留尾
+
+- 拖拽 vs 点击 clickGuard.ts 已 copy 但 2D 暂未在 Scene2D click 中接入（地块命中已足够精确，按需再补）
+- 180 天天气日历跑通但 2D 视觉氛围（lerp 权重）暂只走 `setRainActive(isRain())` 启停雨滴，未做 24h 天空色 lerp（D2D 留尾项：sky tints + 月份概率权重可视表现）
+- HUD `.app canvas` selector 默认 `var(--bg)` 米白背景；`.scene2d-canvas` 走草地绿，CSS specificity 已隔离
+
 ## Phase 2 / Phase 3 / Phase 4
 
 按 [docs/PRD.md](docs/PRD.md) §5 推进。Phase 2 启动条件 = D6 第二轮试玩 + D9 冻结（两个均已就绪）。
