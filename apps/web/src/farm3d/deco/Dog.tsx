@@ -123,11 +123,12 @@ function buildDog(): Group {
  * 蹲姿柯基：在门口 DOG_POS 附近定点踱步 + 摇尾 + 四腿错相步态。
  * 位置/朝向由 useFrame 驱动（参考 Pond.tsx 鱼游动的 mutate 模式，无 React rerender）。
  *
- * 坐标约定：最外层 group 锚定 DOG_POS，并保持 Math.PI/2 基础朝向（让狗头朝世界 +x）。
+ * 坐标约定：最外层 group 锚定 DOG_POS，基础朝向 -Math.PI/2（让狗头朝世界 -x = 朝 cottage）。
  * 走动偏移 + 摆头叠加在 group 上；腿/躯干/尾的微动发生在 primitive 内（局部坐标）。
  *
  * 防漂设计（P2-6 prod 反馈）：ampX 与 bodyYaw 必须都很小。
- * 狗屋本体在世界 [(-1.975, 3.3)]，狗从 [-1.4, 3.2] 往 +x 走 ampX + 摆头，会塞进 doghouse 圆拱门洞。
+ * 移动优先重做（2026-09-08）：cottage 搬到 (-4.5, 0, -6) 后，狗在门口 (-2.4, 0, -5.3)，
+ * 朝 cottage 方向（-x），所以基础朝向改为 -Math.PI/2 而不是 +Math.PI/2。
  * 缩 ampX + 缩 bodyYaw 后，狗始终在原地 0.18 半径内踱，且 cos 微转不超过 0.15 rad（≈8.6°），
  * 配合 leg step + body bob + tail wag 仍生动，但不再有「转脸」动作引发的漂移。
  */
@@ -143,9 +144,10 @@ export default function Dog() {
     const dynamicYaw = Math.cos(phase) * DOG_WALK.bodyYaw
 
     // 外层 group：位移 + 摆头（mutate，不触发 rerender）
+    // 朝 -x（朝 cottage）
     if (groupRef.current) {
       groupRef.current.position.x = DOG_POS[0] + offsetX
-      groupRef.current.rotation.y = Math.PI / 2 + dynamicYaw
+      groupRef.current.rotation.y = -Math.PI / 2 + dynamicYaw
     }
 
     // 躯干微浮：步频 2×（每步身体上下一次），用 ref 列表的 hind/chest/head 三个 mesh

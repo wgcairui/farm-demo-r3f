@@ -16,8 +16,9 @@ import {
 } from 'three'
 import { attachOutlineDeep, toon } from '../toon'
 
-/** 仓库位置：cotage 偏 +x 后方（z=-3.0，留 0.3m 缓冲与背栏） */
-export const WAREHOUSE_POS: [number, number, number] = [-1.5, 0, -3.0]
+/** 仓库位置：原 z=-3 正好在镜头和菜园之间霸屏，移动优先重做搬到 z=-8
+ *  形成「远处村庄」背景，让 6 块菜园完全可见 */
+export const WAREHOUSE_POS: [number, number, number] = [-1.5, 0, -8.0]
 
 function buildWarehouse(): Group {
   const g = new Group()

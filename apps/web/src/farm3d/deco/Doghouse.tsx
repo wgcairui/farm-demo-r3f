@@ -1,6 +1,7 @@
 // 狗屋：小尺寸茅草顶 + 圆拱门洞。
 // 骨头和餐盆放在 cottage 门口附近（参考 QQ 农场布局）。
 // 狗蹲在 DOG_POS（cottage 门口正前方），朝 -x 看回 cottage。
+// 移动优先重做：cottage 搬到 (-4.5, 0, -6) 后，dog/doghouse/骨头/餐盆全部跟着迁移。
 // D12 第五轮：MeshLambertMaterial → toon() + 描边。
 import { useMemo } from 'react'
 import {
@@ -14,12 +15,12 @@ import {
 import { attachOutlineDeep, toon } from '../toon'
 
 /**
- * cottage 门世界坐标：[-2.575, 0, 2.5]
- * 狗位置：cottage 门口前方偏右（避开门口视野，朝 -z 看回 cottage 方向）
+ * cottage 门世界坐标：[-3.575, 0, -6]
+ * 狗位置：cottage 门口前方偏右（朝 +z 看回 cottage 方向）
  * 狗屋位置：cottage 右侧远处
  */
-export const DOG_POS: [number, number, number] = [-1.4, 0, 3.2]
-export const DOGHOUSE_POS: [number, number, number] = [-0.3, 0, 3.8]
+export const DOG_POS: [number, number, number] = [-2.4, 0, -5.3]
+export const DOGHOUSE_POS: [number, number, number] = [-1.3, 0, -4.7]
 
 function buildDoghouse(): Group {
   const g = new Group()
@@ -102,7 +103,7 @@ export default function Doghouse() {
 
     // 狗屋放 cottage 右侧远处（参考图右上角）
     const house = buildDoghouse()
-    house.position.set(0.6, 0, 0.8) // 相对 cottage 门口（门口在 (-2.575, 0, 2.5)）
+    house.position.set(0.6, 0, 0.8) // 相对 cottage 门口（门口在 (-3.575, 0, -6)）
     g.add(house)
 
     // 骨头放在 cottage 门口右侧（参考图 dog 右下方）
@@ -123,7 +124,7 @@ export default function Doghouse() {
   }, [])
 
   return (
-    <group position={[-2.575, 0, 2.5]}>
+    <group position={[-3.575, 0, -6]}>
       <primitive object={group} />
     </group>
   )

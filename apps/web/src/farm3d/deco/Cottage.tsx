@@ -7,8 +7,10 @@ import { useMemo } from 'react'
 import { Group, BoxGeometry, ConeGeometry, Mesh } from 'three'
 import { attachOutlineDeep, toon } from '../toon'
 
-/** cottage 主体位置（与 DOG_PATH.center 一致） */
-export const COTTAGE_POS: [number, number, number] = [-3.5, 0, 2.5]
+/** cottage 主体位置（与 DOG_PATH.center 一致）
+ * 移动优先重做：原位置 z=+2.5 正好在镜头和菜园之间霸屏，
+ 现在搬到 z=-6 变成「背景村座」轮廊，让 6 块菜园完全可见 */
+export const COTTAGE_POS: [number, number, number] = [-4.5, 0, -6]
 
 function buildCottage(): Group {
   const g = new Group()
