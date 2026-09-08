@@ -29,31 +29,6 @@ const DEFAULT_SEED = 42
 
 let days: DailyForecast[] = []
 
-// —— 持久化恢复 ——
-try {
-  const raw = localStorage.getItem(FKEY)
-  if (raw) {
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed === 'object' && parsed !== null) {
-      const p = parsed as Record<string, unknown>
-      if (Array.isArray(p.days) && p.days.length === TOTAL_DAYS) {
-        days = p.days as DailyForecast[]
-      }
-    }
-  }
-} catch {
-  /* 损坏即重新生成 */
-}
-
-if (days.length !== TOTAL_DAYS) {
-  days = generateForecasts(DEFAULT_SEED)
-  try {
-    localStorage.setItem(FKEY, JSON.stringify({ seed: DEFAULT_SEED, days } satisfies ForecastPersisted))
-  } catch {
-    /* 静默 */
-  }
-}
-
 // —— 确定性 RNG：mulberry32 ——
 function mulberry32(seed: number): () => number {
   let s = seed >>> 0
@@ -192,4 +167,29 @@ if (typeof window !== 'undefined') {
     today: getTodayForecast(),
     isDrought: getIsDrought(),
   })
+}
+
+// —— 持久化恢复（必须放在所有 const / function 定义之后，避免 TDZ）——
+try {
+  const raw = localStorage.getItem(FKEY)
+  if (raw) {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed === 'object' && parsed !== null) {
+      const p = parsed as Record<string, unknown>
+      if (Array.isArray(p.days) && p.days.length === TOTAL_DAYS) {
+        days = p.days as DailyForecast[]
+      }
+    }
+  }
+} catch {
+  /* 损坏即重新生成 */
+}
+
+if (days.length !== TOTAL_DAYS) {
+  days = generateForecasts(DEFAULT_SEED)
+  try {
+    localStorage.setItem(FKEY, JSON.stringify({ seed: DEFAULT_SEED, days } satisfies ForecastPersisted))
+  } catch {
+    /* 静默 */
+  }
 }
