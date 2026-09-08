@@ -96,10 +96,10 @@ function CameraRig() {
     controls.enableDamping = true
     controls.dampingFactor = 0.08
     controls.enablePan = false
-    controls.minDistance = 3.2
-    controls.maxDistance = 14
-    controls.minPolarAngle = 0.3
-    controls.maxPolarAngle = 1.25
+    controls.minDistance = 4.2
+    controls.maxDistance = 12
+    controls.minPolarAngle = 0.35
+    controls.maxPolarAngle = 1.2
     // P1-3：保存 Canvas camera prop 注入的「默认机位」作为开场运镜的终点
     // 同时作为 R 键 reset 的标准态（用 controls.saveState 保存）。
     // 注意：camera.position 此时已经等于 props 中的默认值。
@@ -112,7 +112,8 @@ function CameraRig() {
     // 同步 sequence，避免重放过期事件（StrictMode unmount 会 reset）
     lastHarvestSeqRef.current = getCameraSequence()
     // P1-3 开场运镜：从更远更高的机位滑入默认视角
-    const introFrom = new Vector3(defaultPos.x * 1.18, defaultPos.y * 1.22, defaultPos.z * 1.18)
+    // 移动优先（iPhone 15）：起点 *1.22 比桌面 *1.18 飞入感更强
+    const introFrom = new Vector3(defaultPos.x * 1.22, defaultPos.y * 1.22, defaultPos.z * 1.22)
     camera.position.copy(introFrom)
     introFromRef.current = introFrom
     introStartRef.current = performance.now()

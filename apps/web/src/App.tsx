@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { CROPS, type CropId } from '@farm/game'
 import './App.css'
@@ -15,8 +15,8 @@ import {
   GRID_ROWS,
   type DecorationKind,
 } from './farm3d/decorations'
-import { PLOT_GROUP_COUNT } from './farm3d/layout'
-import { WeatherForecast } from './farm3d/WeatherForecast'
+import { WeatherForecast, WeatherSheetBody } from './farm3d/WeatherForecast'
+import { BottomSheet } from './farm3d/BottomSheet'
 
 /** 作物特性一句话（与 events.ts 的 isThirsty/虫害权重规则对应，只是给玩家看的说明书） */
 const TRAITS: Record<CropId, string> = {
@@ -52,24 +52,39 @@ function readHintsDismissed(): boolean {
   }
 }
 
+/** 移动优先：长按 1s 才确认重置 */
+const RESET_HOLD_MS = 1000
+
 export default function App() {
   const { data, tutorial, handlePlot, handlePest, select, reset, tickPlots } = useFarm()
   const [fertMode, setFertMode] = useState(false)
   const [hintsDismissed, setHintsDismissed] = useState(() => readHintsDismissed())
-  // P2-2：当前地块组，0=东园（原点），1=西园（左后方新 6 块）
-  const [plotGroup, setPlotGroup] = useState<0 | 1>(0)
   // 静音状态：useState 初始化时调用 sfx.loadVolumePref()（内部读 localStorage 并同步 muted 标志 + masterGain.gain）
   const [muted, setMutedState] = useState<boolean>(() => loadVolumePref())
   const [comboFlash, setComboFlash] = useState(false)
 
+  // Sheet 状态：互斥打开（同一时刻只一个抽屉）
+  const [sheet, setSheet] = useState<'weather' | 'seed' | 'deco' | 'tutorial' | null>(null)
+  const [seedSheetId, setSeedSheetId] = useState<CropId | null>(null)
+  const [tutorialAutoShown, setTutorialAutoShown] = useState(false)
+
   // P2-3 摆件放置模式
   const [placingMode, setPlacingMode] = useState(false)
   const [placingKind, setPlacingKind] = useState<DecorationKind | null>(null)
-  const [decorationPickerOpen, setDecoPickerOpen] = useState(false)
 
-  // P2-1：首次访问且未完成引导 → 自动开始
+  // 重置按钮长按进度
+  const resetTimerRef = useRef<number | null>(null)
+  const [resetPressing, setResetPressing] = useState(false)
+
+  // P2-1：首次访问且未完成引导 → 自动开始 + 自动弹一次 tutorial sheet
   useEffect(() => {
-    if (!loadTutorialDone()) startTutorial()
+    if (!loadTutorialDone()) {
+      startTutorial()
+      setTutorialAutoShown(true)
+      // 延迟到开场运镜结束再弹（运镜 600ms + 一点点缓冲）
+      const id = window.setTimeout(() => setSheet('tutorial'), 800)
+      return () => window.clearTimeout(id)
+    }
   }, [])
 
   useEffect(() => {
@@ -87,20 +102,6 @@ export default function App() {
       }
     })
   }, [])
-
-  // P2-3：ESC 键取消摆件放置模式
-  useEffect(() => {
-    if (!placingMode) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setPlacingMode(false)
-        setPlacingKind(null)
-        setDecoPickerOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [placingMode])
 
   const closeHintsOnce = () => setHintsDismissed(true)
   const closeHintsForever = () => {
@@ -130,33 +131,85 @@ export default function App() {
     setTool(next ? 'fert' : 'seed')
   }
 
+  // 长按 ↺ 1s 才触发重置；press = pointerdown 任意时机，release/cancel = pointerup/pointerleave
+  const startResetHold = () => {
+    if (resetTimerRef.current !== null) return
+    setResetPressing(true)
+    resetTimerRef.current = window.setTimeout(() => {
+      resetTimerRef.current = null
+      setResetPressing(false)
+      reset()
+    }, RESET_HOLD_MS)
+  }
+  const cancelResetHold = () => {
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current)
+      resetTimerRef.current = null
+    }
+    setResetPressing(false)
+  }
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current)
+        resetTimerRef.current = null
+      }
+    }
+  }, [])
+
+  // 种子详情 sheet：长按触发（pointerdown 后 400ms 算长按，移动端是合理的"查看详情"手势）。
+  // 同时跟踪按下位置，超过 8px 位移就认为是拖拽（用户想滑动/滚动），取消长按 timer——
+  // 否则用户一边选种一边手指稍微一动，400ms 后还是会弹详情，体验糟糕。
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null)
+  const LONG_PRESS_DRAG_PX = 8
+  const startSeedLongPress = (id: CropId, ev: React.PointerEvent<HTMLButtonElement>) => {
+    if (longPressTimerRef.current !== null) return
+    longPressStartRef.current = { x: ev.clientX, y: ev.clientY }
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null
+      longPressStartRef.current = null
+      setSeedSheetId(id)
+      setSheet('seed')
+    }, 400)
+  }
+  const trackSeedLongPressMove = (ev: React.PointerEvent<HTMLButtonElement>) => {
+    const start = longPressStartRef.current
+    if (!start || longPressTimerRef.current === null) return
+    const dx = ev.clientX - start.x
+    const dy = ev.clientY - start.y
+    if (Math.hypot(dx, dy) > LONG_PRESS_DRAG_PX) cancelSeedLongPress()
+  }
+  const cancelSeedLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    longPressStartRef.current = null
+  }
+
+  const seedSheetDef = seedSheetId ? CROPS[seedSheetId] : null
+
   return (
     <div className="app">
       <Canvas
         shadows="percentage"
         flat
         dpr={[1, 2]}
-        camera={{ position: [4.6, 3.6, 5.8], fov: 42, near: 0.1, far: 100 }}
+        camera={{ position: [5.4, 6.0, 6.8], fov: 48, near: 0.1, far: 100 }}
       >
-        <FarmScene data={data} onPlot={handlePlot} onPest={handlePest} onTickPlots={tickPlots} currentGroupIdx={plotGroup} />
+        <FarmScene data={data} onPlot={handlePlot} onPest={handlePest} onTickPlots={tickPlots} />
       </Canvas>
 
-      <WeatherForecast />
-      <header className="hud">
-        <span className="hud-title">🧑‍🌾 小满农场</span>
-        <span className="hud-badge">Phase 1 · D6</span>
-        {/* P2-2 地块组切换：东园 / 西园 */}
-        <button
-          className="plot-group-switch"
-          onClick={() => setPlotGroup((g) => (g === 0 ? 1 : 0))}
-          type="button"
-          title="切换菜园"
-        >
-          {plotGroup === 0 ? '西园' : '东园'}
-        </button>
+      {/* 顶部 TopBar：标题 / 天气 / 金币 */}
+      <header className="topbar">
+        <span className="topbar-title">🧑‍🌾 小满农场</span>
+        <WeatherForecast onOpen={() => setSheet('weather')} />
+        <div key={data.coins} className="coin-pill">
+          <span className="coin-icon">🪙</span>
+          <span>{data.coins}</span>
+        </div>
       </header>
-      {/* key=coins：数字变化即重挂载，重放 150ms（DUR.fast）跳动 */}
-      <div key={data.coins} className="coins">🪙 {data.coins}</div>
 
       {/* 事件横幅：events.ts 命令式更新（textContent/className），React 不参与 */}
       <div id="event-banner" />
@@ -168,9 +221,11 @@ export default function App() {
           P1-4 P0 补强：补一句"空地发光可播种"，让玩家把空地脉动与播种意图关联
           自动关闭由 R 键 / 收获动效派发 CustomEvent 触发
           主动关闭通过 localStorage 永久记忆 */}
-      {!hintsDismissed && (
+      {!hintsDismissed && sheet !== 'tutorial' && (
         <div className="hints" role="status">
-          <span>空地发光可播种；收获时镜头自动推近；按 <span className="kbd">R</span> 重置视角</span>
+          <span>
+            空地发光可播种；按 <span className="kbd">R</span> 重置视角
+          </span>
           <button className="hints-never" onClick={closeHintsForever} type="button">
             不再提示
           </button>
@@ -180,16 +235,17 @@ export default function App() {
         </div>
       )}
 
-      {/* P2-1 新手引导 overlay：仅在引导进行中（step !== 0 && step !== 'done'）显示 */}
+      {/* P2-1 新手引导 overlay：仅在引导进行中（step !== 0 && step !== 'done'）显示
+          移动优先：从顶部黄色条改为底部 sheet，统一移动端 modal 体验 */}
       {tutorial.step !== 0 && tutorial.step !== 'done' && (
         <div className="tutorial-overlay" role="status">
-          <span>
-            {tutorial.step === 1 && 'Step 1/3: 点这里选胡萝卜种子'}
-            {tutorial.step === 2 && 'Step 2/3: 点这里播种到空地'}
-            {tutorial.step === 3 && 'Step 3/3: 等待作物成熟后点击收获'}
+          <span style={{ flex: 1 }}>
+            {tutorial.step === 1 && 'Step 1/3: 长按或点胡萝卜图标'}
+            {tutorial.step === 2 && 'Step 2/3: 点空地播种'}
+            {tutorial.step === 3 && 'Step 3/3: 等待成熟，点击收获'}
           </span>
-          <button onClick={dismissTutorialOnce} type="button" aria-label="本次跳过">
-            × 跳过
+          <button onClick={dismissTutorialOnce} type="button" aria-label="本次跳过（刷新后会再出现）">
+            本次跳过
           </button>
           <button onClick={skipTutorial} type="button">
             不再提示
@@ -200,88 +256,88 @@ export default function App() {
       {/* 引导完成后的庆祝提示 */}
       {tutorial.step === 'done' && tutorial.complete && (
         <div className="tutorial-overlay" role="status">
-          <span>🎉 太棒了！现在你可以自由探索</span>
+          <span style={{ flex: 1 }}>🎉 太棒了！现在自由探索</span>
         </div>
       )}
 
-      <div className="seedbar">
-        {(Object.keys(CROPS) as CropId[]).map((id) => {
-          const def = CROPS[id]
-          const afford = data.coins >= def.seedPrice
-          return (
-            <button
-              key={id}
-              className={`seed ${data.selected === id && !fertMode ? 'active' : ''} ${afford ? '' : 'poor'} ${tutorial.step === 1 && id === 'carrot' ? 'tutorial-target' : ''}`}
-              onClick={() => pickSeed(id)}
-            >
-              <span className="emoji">{def.emoji}</span>
-              <span className="name">{def.name}</span>
-              <span className="trait">{TRAITS[id]}</span>
-              <span className="price">买 {def.seedPrice} · 卖 {def.sellPrice}</span>
-            </button>
-          )
-        })}
-        <button
-          className={`seed fert ${fertMode ? 'active' : ''} ${data.coins < FERT_COST ? 'poor' : ''}`}
-          onClick={pickFert}
-          title="选中后点击生长中的作物：生长 +50%，直到收获（5 金币）"
-        >
-          <span className="emoji">🧪</span>
-          <span className="name">施肥</span>
-          <span className="trait">加速</span>
-          <span className="price">{FERT_COST}🪙 · +50% 速度</span>
-        </button>
-        <button
-          className="mute"
-          onClick={toggleMute}
-          aria-pressed={muted}
-          aria-label={muted ? '取消静音' : '静音'}
-          type="button"
-        >
-          {muted ? '🔇' : '🔊'}
-        </button>
-        <button
-          className={`deco-btn ${decorationPickerOpen || placingMode ? 'active' : ''}`}
-          onClick={() => {
-            const wasOpen = decorationPickerOpen
-            setDecoPickerOpen(!wasOpen)
-            if (wasOpen) {
-              setPlacingMode(false)
-              setPlacingKind(null)
-            }
-          }}
-          type="button"
-          title="装饰摆件"
-        >
-          🏠
-        </button>
-        <button className="reset" onClick={reset}>
-          ↺
-        </button>
+      {/* 底部 BottomBar：左侧种子 + 施肥 + 右侧工具 */}
+      <div className="bottombar">
+        <div className="seed-group" role="group" aria-label="选择种子">
+          {(Object.keys(CROPS) as CropId[]).map((id) => {
+            const def = CROPS[id]
+            const afford = data.coins >= def.seedPrice
+            const isActive = data.selected === id && !fertMode
+            return (
+              <button
+                key={id}
+                className={`seed-pill ${isActive ? 'active' : ''} ${
+                  afford ? '' : 'poor'
+                } ${tutorial.step === 1 && id === 'carrot' ? 'tutorial-target' : ''}`}
+                onClick={() => pickSeed(id)}
+                onPointerDown={(ev) => startSeedLongPress(id, ev)}
+                onPointerMove={trackSeedLongPressMove}
+                onPointerUp={cancelSeedLongPress}
+                onPointerLeave={cancelSeedLongPress}
+                onPointerCancel={cancelSeedLongPress}
+                aria-label={`${def.name} ${def.seedPrice}/${def.sellPrice}`}
+                type="button"
+              >
+                <span>{def.emoji}</span>
+                <span className="price-badge">{def.seedPrice}</span>
+              </button>
+            )
+          })}
+          {/* 施肥按钮：作为第 3 颗"种子药丸"（emoji + 价格），切换为 fert tool */}
+          <button
+            key="fert"
+            className={`seed-pill ${fertMode ? 'active' : ''} ${
+              data.coins < FERT_COST ? 'poor' : ''
+            }`}
+            onClick={pickFert}
+            aria-label={`施肥 ${FERT_COST} 金币`}
+            type="button"
+          >
+            <span>🧪</span>
+            <span className="price-badge">{FERT_COST}</span>
+          </button>
+        </div>
+
+        <div className="tool-group" role="group" aria-label="工具">
+          <button
+            type="button"
+            className={`icon-btn ${placingMode || placingKind ? 'active' : ''}`}
+            onClick={() => setSheet('deco')}
+            aria-label="装饰摆件"
+            title="装饰摆件"
+          >
+            🏠
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={toggleMute}
+            aria-pressed={muted}
+            aria-label={muted ? '取消静音' : '静音'}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
+          <button
+            type="button"
+            className={`icon-btn icon-btn--reset ${resetPressing ? 'icon-btn--resetting' : ''}`}
+            onPointerDown={startResetHold}
+            onPointerUp={cancelResetHold}
+            onPointerLeave={cancelResetHold}
+            onPointerCancel={cancelResetHold}
+            aria-label="长按重置"
+            title="长按重置"
+          >
+            <span className="reset-progress" aria-hidden="true" />
+            <span className="icon-btn__label">↺</span>
+          </button>
+        </div>
       </div>
 
-      {/* P2-3 摆件选择浮层 */}
-      {decorationPickerOpen && !placingMode && (
-        <div className="deco-picker" role="dialog" aria-label="选择摆件">
-          {(['windmill', 'scarecrow', 'barrel', 'fence'] as DecorationKind[]).map((kind) => (
-            <button
-              key={kind}
-              className="deco-card"
-              onClick={() => {
-                setPlacingKind(kind)
-                setPlacingMode(true)
-                setDecoPickerOpen(false)
-              }}
-              type="button"
-            >
-              <span className="emoji">{DECO_EMOJI[kind]}</span>
-              <span>{DECO_NAME[kind]}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* P2-3 网格放置覆盖层 */}
+      {/* P2-3 网格放置覆盖层（避让 HUD：top 52 / bottom 66） */}
       {placingMode && (
         <div
           className="deco-grid"
@@ -305,6 +361,134 @@ export default function App() {
       )}
 
       <div id="float-root" />
+
+      {/* 放置模式激活时，底部 BottomBar 让位给「取消 / 完成」二选一，避免依赖 ESC 键 */}
+      {placingMode && (
+        <div className="bottombar">
+          <div className="tool-group" style={{ width: '100%', justifyContent: 'space-between' }}>
+            <button
+              type="button"
+              className="icon-btn icon-btn--wide"
+              onClick={() => {
+                setPlacingMode(false)
+                setPlacingKind(null)
+              }}
+              aria-label="取消放置"
+            >
+              取消
+            </button>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
+              点击格子放置
+            </span>
+            <button
+              type="button"
+              className="icon-btn icon-btn--wide active"
+              onClick={() => {
+                setPlacingMode(false)
+                setPlacingKind(null)
+              }}
+              aria-label="完成放置"
+            >
+              完成
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* —— BottomSheet 抽屉系统（互斥打开） —— */}
+      <BottomSheet
+        open={sheet === 'weather'}
+        onClose={() => setSheet(null)}
+        title="天气预报"
+        subtitle="点击日期可快进到那一天"
+      >
+        <WeatherSheetBody onClose={() => setSheet(null)} />
+      </BottomSheet>
+
+      <BottomSheet
+        open={sheet === 'seed' && seedSheetDef !== null}
+        onClose={() => {
+          setSheet(null)
+          setSeedSheetId(null)
+        }}
+      >
+        {seedSheetDef && (
+          <div className="seed-detail">
+            <span className="big-emoji">{seedSheetDef.emoji}</span>
+            <span className="seed-name">{seedSheetDef.name}</span>
+            <span className="seed-trait">{seedSheetId ? TRAITS[seedSheetId] : ''}</span>
+            <div className="seed-prices">
+              <span>
+                买 <b>{seedSheetDef.seedPrice}</b> 🪙
+              </span>
+              <span>
+                卖 <b>{seedSheetDef.sellPrice}</b> 🪙
+              </span>
+            </div>
+            <button
+              type="button"
+              className="sheet-cta"
+              style={{ marginTop: 16 }}
+              onClick={() => {
+                if (seedSheetId) pickSeed(seedSheetId)
+                setSheet(null)
+                setSeedSheetId(null)
+              }}
+            >
+              选择 {seedSheetDef.name}
+            </button>
+          </div>
+        )}
+      </BottomSheet>
+
+      <BottomSheet
+        open={sheet === 'deco'}
+        onClose={() => setSheet(null)}
+        title="摆件"
+        subtitle="选一个放到农场里"
+      >
+        <div className="deco-sheet-grid">
+          {(['windmill', 'scarecrow', 'barrel', 'fence'] as DecorationKind[]).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className="deco-sheet-card"
+              onClick={() => {
+                setPlacingKind(kind)
+                setPlacingMode(true)
+                setSheet(null)
+              }}
+            >
+              <span className="emoji">{DECO_EMOJI[kind]}</span>
+              <span>{DECO_NAME[kind]}</span>
+            </button>
+          ))}
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        open={sheet === 'tutorial' && tutorial.step !== 0 && tutorial.step !== 'done'}
+        onClose={() => setSheet(null)}
+        title={tutorialAutoShown ? '欢迎来到小满农场' : '教程提示'}
+        subtitle={
+          tutorial.step === 1
+            ? '点击底部的 🥕 胡萝卜图标开始'
+            : tutorial.step === 2
+            ? '点击任意空地播种'
+            : '点击成熟的作物收获'
+        }
+      >
+        <p style={{ fontSize: 15, color: 'var(--text-primary)', lineHeight: 1.5, margin: '12px 0' }}>
+          {tutorial.step === 1 &&
+            '选种子只要点一下图标；想看价格 / 卖出价，长按图标会弹出详情。'}
+          {tutorial.step === 2 && '播种会扣金币；作物需要时间生长，期间保持金色脉动。'}
+          {tutorial.step === 3 &&
+            '收获后金币入账；如果 8 秒内不点击清空，作物会自动消失。'}
+        </p>
+        <button type="button" className="sheet-cta" onClick={() => setSheet(null)}>
+          继续
+        </button>
+      </BottomSheet>
     </div>
   )
 }

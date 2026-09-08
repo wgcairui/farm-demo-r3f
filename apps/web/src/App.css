@@ -1,3 +1,28 @@
+/* 移动优先（iPhone 15 portrait = 393×852pt）iOS HIG + Linear 风
+ * 设计 token 与 apps/web/src/farm3d/designTokens.ts 同源；CSS 端 :root 镜像。
+ * 命名空间：HUD 类以 `.topbar` / `.bottombar` / `.icon-btn` / `.seed-pill` 等线性化命名。 */
+
+:root {
+  --bg: #F7F7F5;
+  --surface: #FFFFFF;
+  --border: rgba(60, 60, 67, 0.12);
+  --text-primary: #1C1C1E;
+  --text-secondary: rgba(60, 60, 67, 0.6);
+  --accent: #2E7D32;
+  --accent-soft: rgba(46, 125, 50, 0.08);
+  --gold: #B8860B;
+  --danger: #C62828;
+  --info: #1565C0;
+
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC',
+    'Helvetica Neue', sans-serif;
+
+  --topbar-h: 44px;
+  --bottombar-h: 58px;
+  --hit-target: 44px;
+}
+
+/* —— base —— */
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -13,7 +38,8 @@ body,
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-family);
+  background: var(--bg);
   overflow: hidden;
 }
 
@@ -21,6 +47,7 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
+  background: var(--bg);
 }
 
 .app canvas {
@@ -28,336 +55,325 @@ body {
   touch-action: none;
 }
 
-.hud {
+/* —— 顶部 TopBar —— */
+.topbar {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 14px);
-  left: 16px;
+  top: env(safe-area-inset-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--topbar-h);
+  padding: 0 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px;
   pointer-events: none;
-}
-
-.hud-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: #2d4a1e;
-  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.8);
-}
-
-.hud-badge {
-  font-size: 12px;
-  font-weight: 600;
-  color: #4c6b2f;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(6px);
-  border-radius: 999px;
-  padding: 4px 10px;
-}
-
-.coins {
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 14px);
-  right: 16px;
-  background: rgba(255, 255, 255, 0.88);
-  border-radius: 999px;
-  padding: 7px 16px;
-  font-weight: 800;
-  font-size: 16px;
-  color: #7a5800;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  pointer-events: none;
-  animation: coinPop 150ms ease-out;
-}
-
-@keyframes coinPop {
-  from {
-    transform: scale(1.18);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-.seedbar {
-  position: absolute;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
-  transform: translateX(-50%);
-  display: flex;
-  gap: 10px;
-}
-
-.seed {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 96px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 2px solid transparent;
-  border-radius: 14px;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-
-.seed.active {
-  border-color: #4caf50;
-  background: #f2fff0;
-}
-
-.seed.poor {
-  opacity: 0.45;
-}
-
-.seed .emoji {
-  font-size: 24px;
-}
-
-.seed .price {
-  color: #b26a00;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.seed .trait {
-  color: #5c7a44;
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.seed.fert.active {
-  border-color: #7ee06a;
-  background: #f4ffe9;
-}
-
-/* 事件横幅：显隐与文案全部由 events.ts 命令式驱动，CSS 只管外观 */
-#event-banner {
-  position: absolute;
-  /* P2-6：让位给顶部天气预报，下移到 safe+88px */
-  top: calc(env(safe-area-inset-top, 0px) + 88px);
-  left: 50%;
-  transform: translate(-50%, -6px);
-  opacity: 0;
-  transition: opacity 300ms ease, transform 300ms ease; /* 300ms = motion.DUR.base（TS 常量进不了 CSS，手工对齐） */
-  pointer-events: none;
-  padding: 7px 16px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  background: rgba(38, 70, 104, 0.82);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  white-space: nowrap;
-  z-index: 6;
-}
-
-#event-banner.show {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-
-#event-banner.drought {
-  background: rgba(146, 94, 22, 0.88);
-}
-
-#event-banner.pest {
-  background: rgba(150, 40, 32, 0.88);
-}
-
-/* P2-6 天气预报面板：顶部单行药丸，safe+14~50px，让位 event-banner */
-.weather-forecast {
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 14px);
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #2d4a1e;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 7;
+}
+
+.topbar-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* —— 天气药丸（顶部 inline，仅今日 icon+温度） —— */
+.weather-pill {
   pointer-events: auto;
-  max-width: calc(100vw - 32px);
-  overflow-x: auto;
-}
-
-.weather-forecast.drought {
-  background: rgba(255, 240, 210, 0.95);
-  border: 1px solid rgba(146, 94, 22, 0.4);
-}
-
-.wf-date {
-  white-space: nowrap;
-}
-
-.wf-today {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(45, 74, 30, 0.1);
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-
-.wf-icon {
-  font-size: 14px;
+.weather-pill.drought {
+  background: rgba(255, 240, 210, 0.95);
+  border-color: rgba(146, 94, 22, 0.4);
 }
-
-.wf-temp {
+.weather-pill .wf-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.weather-pill .wf-temp {
   font-variant-numeric: tabular-nums;
 }
-
 .wf-cold { color: #3a6a9a; }
 .wf-cool { color: #4a8a4a; }
 .wf-warm { color: #c08020; }
 .wf-hot { color: #c83020; }
 
-.wf-future {
+/* —— 金币药丸（顶部右侧） —— */
+.coin-pill {
+  pointer-events: none;
   display: inline-flex;
-  gap: 6px;
-  border-left: 1px solid rgba(0, 0, 0, 0.1);
-  padding-left: 10px;
-}
-
-.wf-future-day {
-  display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1px;
-  font-size: 11px;
-  color: rgba(45, 74, 30, 0.7);
-}
-
-.wf-future-icon {
-  font-size: 13px;
-}
-
-.wf-future-temp {
+  gap: 4px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--gold);
   font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  animation: coinPop 150ms ease-out;
+}
+.coin-pill .coin-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+@keyframes coinPop {
+  from { transform: scale(1.18); }
+  to { transform: scale(1); }
 }
 
-.wf-controls {
-  display: inline-flex;
-  gap: 2px;
-  border-left: 1px solid rgba(0, 0, 0, 0.1);
-  padding-left: 8px;
-}
-
-.wf-controls button {
-  width: 26px;
-  height: 26px;
-  border: none;
-  background: rgba(45, 74, 30, 0.08);
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.wf-controls button:hover {
-  background: rgba(45, 74, 30, 0.2);
-}
-
-.wf-controls button:active {
-  background: rgba(45, 74, 30, 0.3);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wf-controls button { transition: none; }
-}
-
-.reset {
-  width: 44px;
-  border: none;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  font-size: 18px;
-  cursor: pointer;
-}
-
-/* 教程提示：右下角小气泡，让用户知道收获推近与 R 键重置
-   z-index 高于 #float-root（5）但低于事件横幅（6），避免遮挡浮字与事件文案 */
-.hints {
+/* —— 事件横幅：让位 topbar，下移 —— */
+#event-banner {
   position: absolute;
-  right: 16px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 70px);
+  top: calc(env(safe-area-inset-top, 0px) + var(--topbar-h) + 8px);
+  left: 12px;
+  right: 12px;
+  transform: translateY(-6px);
+  opacity: 0;
+  transition: opacity 300ms ease, transform 300ms ease;
+  pointer-events: none;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(38, 70, 104, 0.88);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  text-align: center;
+  z-index: 7;
+}
+#event-banner.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+#event-banner.drought { background: rgba(146, 94, 22, 0.92); }
+#event-banner.pest { background: rgba(150, 40, 32, 0.92); }
+
+/* —— 底部 BottomBar —— */
+.bottombar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  height: var(--bottombar-h);
+  padding: 0 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  justify-content: space-between;
+  gap: 8px;
+  z-index: 7;
+}
+
+/* 种子栏（左半，居中靠左） */
+.seed-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.seed-pill {
+  position: relative;
+  width: var(--hit-target);
+  height: var(--hit-target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 150ms ease;
+}
+.seed-pill.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.seed-pill.poor {
+  opacity: 0.4;
+}
+.seed-pill .price-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  min-width: 16px;
+  height: 14px;
+  padding: 0 4px;
+  background: var(--text-primary);
+  color: #fff;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.seed-pill.active .price-badge {
+  background: var(--accent);
+}
+
+/* 工具按钮组（右半，居中靠右） */
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.icon-btn {
+  position: relative;
+  width: var(--hit-target);
+  height: var(--hit-target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 20px;
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 150ms ease;
+}
+.icon-btn.active {
+  background: var(--accent-soft);
+}
+.icon-btn:active:not(.icon-btn--resetting) {
+  background: rgba(60, 60, 67, 0.08);
+}
+
+/* 放置模式的「取消 / 完成」宽按钮：auto width，文字 + emoji 一行 */
+.icon-btn--wide {
+  width: auto;
+  min-width: 96px;
+  padding: 0 16px;
+  height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  gap: 4px;
+  white-space: nowrap;
+}
+.icon-btn--wide.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 重置按钮：长按 1s 防误触 */
+.icon-btn--reset {
+  overflow: hidden;
+}
+.icon-btn--reset .reset-progress {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--danger);
+  transform: scale(0);
+  transform-origin: center;
+  pointer-events: none;
+  z-index: 0;
+}
+.icon-btn--resetting .reset-progress {
+  animation: resetFill 1000ms linear forwards;
+}
+.icon-btn--reset .icon-btn__label {
+  position: relative;
+  z-index: 1;
+}
+@keyframes resetFill {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+/* —— 教程提示气泡（右下方小卡片，窄屏收紧） —— */
+.hints {
+  position: absolute;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--bottombar-h) + 8px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   font-size: 12px;
-  color: #3a5320;
-  max-width: 260px;
+  color: var(--text-secondary);
+  max-width: 220px;
   z-index: 6;
   animation: hintFadeIn 280ms ease-out;
 }
-
 .hints .kbd {
   display: inline-block;
   padding: 1px 6px;
-  border-radius: 6px;
-  background: #e7f3d6;
-  border: 1px solid #b8d487;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: inherit;
   font-weight: 700;
-  color: #2d4a1e;
+  color: var(--text-primary);
   font-size: 11px;
 }
-
-.hints-close {
-  background: none;
-  border: none;
-  color: #6f8543;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-}
-.hints-close:hover {
-  color: #2d4a1e;
-}
-
+.hints-close,
 .hints-never {
   background: none;
   border: none;
-  color: #6f8543;
-  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: inherit;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 4px;
+  line-height: 1;
+}
+.hints-never {
+  font-size: 11px;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.hints-never:hover {
-  color: #2d4a1e;
-}
+.hints-close { font-size: 14px; }
 
 @keyframes hintFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
+/* —— float root：3D 投影文字层 —— */
 #float-root {
   position: absolute;
   inset: 0;
@@ -369,68 +385,55 @@ body {
 .floater {
   position: absolute;
   transform: translate(-50%, -50%);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   color: #fff8d0;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7), 0 0 6px rgba(0, 0, 0, 0.3);
-  /* 1.05s：QQ 农场倒计时节奏——入场即满显，留 ~0.7s 给玩家看清再淡出上漂 */
   animation: rise 1.05s ease-out forwards;
+  pointer-events: none;
+  white-space: nowrap;
 }
-
 @keyframes rise {
-  0% {
-    opacity: 0;
-    margin-top: 6px;
-  }
-  10% {
-    opacity: 1;
-    margin-top: 0;
-  }
-  70% {
-    opacity: 1;
-    margin-top: -10px;
-  }
-  100% {
-    opacity: 0;
-    margin-top: -32px;
-  }
+  0%   { opacity: 0; margin-top: 6px; }
+  10%  { opacity: 1; margin-top: 0; }
+  70%  { opacity: 1; margin-top: -10px; }
+  100% { opacity: 0; margin-top: -32px; }
 }
 
-/* 主菜级收获浮字：大号 + 金色 + 0→1.3→1 果冻回弹（1150ms = linger + fast） */
 .floater.hero {
-  font-size: 36px;
+  font-size: 40px;
   color: #fff2a8;
   text-shadow:
     0 0 12px rgba(255, 220, 80, 0.9),
     0 2px 4px rgba(80, 50, 0, 0.7);
   animation: heroPop 1.15s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
 }
-
 @keyframes heroPop {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.4);
-    margin-top: 0;
-  }
-  20% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.3);
-    margin-top: -8px;
-  }
-  40% {
-    transform: translate(-50%, -50%) scale(0.95);
-  }
-  60% {
-    transform: translate(-50%, -50%) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1);
-    margin-top: -56px;
-  }
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); margin-top: 0; }
+  20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.3); margin-top: -8px; }
+  40%  { transform: translate(-50%, -50%) scale(0.95); }
+  60%  { transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); margin-top: -56px; }
 }
 
-/* 收获震屏：CSS keyframe 帧率无关，280ms 内完成 6 次抖动 */
+.floater.combo-2 { color: #ffd24a; font-size: 26px; text-shadow: 0 0 8px rgba(255,200,0,.6); }
+.floater.combo-3 { color: #ffb43a; font-size: 30px; text-shadow: 0 0 12px rgba(255,160,0,.7); }
+.floater.combo-4 { color: #ff7a30; font-size: 34px; text-shadow: 0 0 16px rgba(255,80,0,.8); }
+.floater.combo-5 { color: #ff4030; font-size: 40px; text-shadow: 0 0 20px rgba(255,40,0,.9); }
+
+/* —— combo 全屏闪光 —— */
+#combo-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background: radial-gradient(circle at center, rgba(255,200,80,0) 60%, rgba(255,180,40,0.45) 100%);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+#combo-flash.show { opacity: 1; }
+
+/* —— 收获震屏 —— */
 @keyframes jellyShake {
   0%, 100% { transform: translate(0, 0); }
   10% { transform: translate(-4px, 2px); }
@@ -440,62 +443,29 @@ body {
   70% { transform: translate(-2px, 1px); }
   85% { transform: translate(1px, -1px); }
 }
+.app.jelly-shake { animation: jellyShake 280ms ease-out; }
+.app.jelly-shake--soft { animation: jellyShake 280ms ease-out; }
 
-.app.jelly-shake {
-  animation: jellyShake 280ms ease-out;
-}
-
-.app.jelly-shake--soft {
-  animation: jellyShake 280ms ease-out;
-  /* 减产收获震感轻一些：缩到 60% 幅度 */
-}
-
-/* 减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
   .app.jelly-shake,
   .app.jelly-shake--soft { animation: none; }
   .floater.hero { animation-duration: 0.4s; }
 }
 
-.mute {
-  width: 44px;
-  border: none;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  font-size: 20px;
-  cursor: pointer;
-}
-
-/* P2-3 摆件按钮 */
-.deco-btn {
-  width: 44px;
-  border: none;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  font-size: 20px;
-  cursor: pointer;
-}
-.deco-btn.active {
-  border: 2px solid #4caf50;
-  background: #f2fff0;
-}
-
-/* P2-3 摆件选择浮层 */
+/* —— 摆件选择浮层（暂时保留桌面布局，作为抽屉未挂载时的兜底；抽屉接入后可删） —— */
 .deco-picker {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 140px);
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 10px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 14px;
-  padding: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   z-index: 7;
-  animation: hintFadeIn 280ms ease-out;
 }
 .deco-card {
   display: flex;
@@ -505,92 +475,283 @@ body {
   border-radius: 10px;
   border: 2px solid transparent;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.6);
+  background: transparent;
   font-family: inherit;
   font-size: 12px;
   gap: 4px;
-  color: #3a5320;
+  color: var(--text-primary);
   font-weight: 600;
 }
-.deco-card:hover { background: #f8fff0; border-color: #4caf50; }
+.deco-card:hover { background: var(--accent-soft); border-color: var(--accent); }
 .deco-card .emoji { font-size: 28px; }
 
-/* P2-3 网格放置覆盖层 */
+/* —— 摆件网格放置覆盖层（避让 HUD：顶部 52 = topbar+8 / 底部 58 = bottombar+0，留 8pt 呼吸） —— */
 .deco-grid {
   position: absolute;
-  inset: 0;
-  background: rgba(255, 220, 80, 0.12);
+  top: calc(env(safe-area-inset-top, 0px) + 52px);
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--bottombar-h));
+  background: rgba(46, 125, 50, 0.08);
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(6, 1fr);
   z-index: 4;
   cursor: crosshair;
+  padding: 4px;
+  gap: 2px;
 }
-.deco-cell { border: 1px dashed rgba(255, 200, 60, 0.4); }
-.deco-cell:hover { background: rgba(255, 220, 80, 0.4); }
-
-/* combo-2 浅金、combo-3 亮金、combo-4 橙、combo-5+ 红橙（复用水花动画） */
-.floater.combo-2 { color: #ffd24a; font-size: 24px; text-shadow: 0 0 8px rgba(255,200,0,.6); }
-.floater.combo-3 { color: #ffb43a; font-size: 28px; text-shadow: 0 0 12px rgba(255,160,0,.7); }
-.floater.combo-4 { color: #ff7a30; font-size: 32px; text-shadow: 0 0 16px rgba(255,80,0,.8); }
-.floater.combo-5 { color: #ff4030; font-size: 36px; text-shadow: 0 0 20px rgba(255,40,0,.9); }
-
-/* combo >= 4 时全屏金色 vignette 闪光。
-   z-index: 4 故意低于 #float-root（5），让连击浮字（地块头顶"+N"）盖在闪光之上——
-   否则 150ms 内 combo 浮字被 vignette 遮住，玩家看不到反馈。 */
-#combo-flash {
-  position: absolute; inset: 0; pointer-events: none; z-index: 4;
-  background: radial-gradient(circle at center, rgba(255,200,80,0) 60%, rgba(255,180,40,0.45) 100%);
-  opacity: 0; transition: opacity 150ms ease-out;
+.deco-cell {
+  border: 1px dashed rgba(46, 125, 50, 0.35);
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  transition: background-color 120ms ease;
 }
-#combo-flash.show { opacity: 1; }
+.deco-cell:hover { background: rgba(46, 125, 50, 0.25); }
 
-/* P2-1 新手引导：胡萝卜种子按钮高亮脉冲 */
-.tutorial-target {
-  animation: tutorialPulse 1s ease-in-out infinite;
-  border-color: #ffd24a !important;
-}
-@keyframes tutorialPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255,210,74,0.7); }
-  50% { box-shadow: 0 0 0 12px rgba(255,210,74,0); }
-}
-
-/* P2-1 新手引导：顶部居中提示条 */
+/* —— 教程 overlay（黄色贴片，移到 topbar 下方） —— */
 .tutorial-overlay {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 80px);
-  left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top, 0px) + var(--topbar-h) + 8px);
+  left: 12px;
+  right: 12px;
   background: rgba(255, 210, 74, 0.95);
   color: #5a3500;
   font-weight: 700;
-  padding: 12px 20px;
-  border-radius: 14px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  padding: 10px 14px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   z-index: 7;
-  display: flex; align-items: center; gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
   animation: hintFadeIn 280ms ease-out;
 }
 .tutorial-overlay button {
-  background: rgba(255,255,255,0.8);
-  border: none; padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: none;
+  padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12px; font-weight: 600;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #5a3500;
 }
 
-/* P2-2 地块组切换按钮：44px 圆角，与 mute/reset 风格一致 */
-.plot-group-switch {
-  width: 44px;
-  height: 44px;
+/* —— 教程高亮脉冲（用于 seed-pill） —— */
+.tutorial-target {
+  animation: tutorialPulse 1s ease-in-out infinite;
+}
+@keyframes tutorialPulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(255, 210, 74, 0.9), 0 0 0 0 rgba(255, 210, 74, 0.5); }
+  50%      { box-shadow: inset 0 0 0 2px rgba(255, 210, 74, 0.9), 0 0 0 8px rgba(255, 210, 74, 0); }
+}
+
+/* —— 底部 Sheet（iOS HIG modal sheet） —— */
+.sheet-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 90;
+  animation: sheetMaskIn 240ms ease-out;
+}
+@keyframes sheetMaskIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 70vh;
+  background: var(--surface);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: sheetSlideIn 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes sheetSlideIn {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.sheet-handle {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sheet-handle::after {
+  content: '';
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.sheet-body {
+  padding: 4px 16px 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+}
+
+.sheet-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.4px;
+  margin: 4px 0 2px;
+}
+.sheet-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.sheet-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px -16px;
+}
+
+/* Sheet 主按钮：iOS HIG 风格 primary action */
+.sheet-cta {
+  width: 100%;
+  height: var(--hit-target);
   border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  font-size: 11px;
-  font-weight: 700;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
   font-family: inherit;
-  color: #4c6b2f;
   cursor: pointer;
-  flex-shrink: 0;
-  pointer-events: auto;
+  margin-top: 8px;
+}
+.sheet-cta:active { opacity: 0.85; }
+
+/* —— 天气 sheet 内部行样式 —— */
+.wf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.wf-row:last-child { border-bottom: none; }
+.wf-row .wf-day-label {
+  font-weight: 600;
+  min-width: 56px;
+}
+.wf-row .wf-day-temp {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.wf-controls-sheet {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+.wf-controls-sheet button {
+  height: var(--hit-target);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 18px;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+.wf-controls-sheet button:active { background: var(--accent-soft); }
+
+/* —— 种子详情 sheet 内容 —— */
+.seed-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0 8px;
+}
+.seed-detail .big-emoji {
+  font-size: 56px;
+  line-height: 1;
+}
+.seed-detail .seed-name {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 8px;
+}
+.seed-detail .seed-trait {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.seed-detail .seed-prices {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.seed-detail .seed-prices b {
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* —— 装饰 sheet 网格 —— */
+.deco-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+.deco-sheet-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.deco-sheet-card:active { background: var(--accent-soft); }
+.deco-sheet-card .emoji { font-size: 32px; }
+
+/* —— 较小屏（≤ 360pt，旧 iPhone SE）压缩 —— */
+@media (max-width: 360px) {
+  :root { --topbar-h: 40px; --bottombar-h: 56px; }
+  .topbar-title { font-size: 15px; }
+  .weather-pill { padding: 0 10px; font-size: 12px; }
+  .coin-pill { font-size: 15px; padding: 0 10px; }
+  .seed-pill { width: 40px; height: 40px; font-size: 22px; }
+  .icon-btn { width: 40px; height: 40px; font-size: 18px; }
+}
+
+/* —— 较大屏（桌面 ≥ 768pt）：保留相同布局 + 更多留白 —— */
+@media (min-width: 768px) {
+  .topbar { padding: 0 24px; }
+  .bottombar { padding: 0 24px; max-width: 720px; margin: 0 auto; }
+  .hints { max-width: 280px; }
 }

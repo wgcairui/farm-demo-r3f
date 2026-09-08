@@ -16,8 +16,8 @@ export const CAMERA = {
   introMs: 600,
   /** 收获聚焦的推近与回位总时长 */
   harvestMs: 600,
-  /** 收获时相机距离缩短比例 */
-  harvestZoom: 0.88,
+  /** 收获时相机距离缩短比例（窄屏 0.82 比桌面 0.88 推得更明显） */
+  harvestZoom: 0.82,
 } as const
 
 export const ease = {

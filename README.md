@@ -1,6 +1,6 @@
 # farm-demo
 
-「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线零 diff——D7 主动破例重构，理由见 PROGRESS.md）。当前进度：**Phase 1 D1~D12 已完成，Web 版已部署并验证；Phase 2 RN 移植按用户决定暂缓**；详细 D 级轨迹见 [PROGRESS.md](PROGRESS.md)，验收勾选见 [docs/PRD.md](docs/PRD.md)。
+「开心农场」3D 重制：**RN + Three.js** 面试作品项目。游戏逻辑抽为共享包 `packages/game`（纯 TS，对 2D 基线零 diff——D7 主动破例重构，理由见 PROGRESS.md）。当前进度：**Phase 1 D1~D12 已完成，Web 版已部署并验证；Phase 2 RN 移植按用户决定暂缓；新增第三渲染壳 `apps/minigame`（Cocos Creator 微信小游戏），M1 单场景原型已跑通本地编译**；详细 D 级轨迹见 [PROGRESS.md](PROGRESS.md)，验收勾选见 [docs/PRD.md](docs/PRD.md)，小游戏移植设计见 [docs/MINIGAME.md](docs/MINIGAME.md)。
 
 详细计划见 [docs/PRD.md](docs/PRD.md)，资产清单与授权见 [packages/assets/ASSETS.md](packages/assets/ASSETS.md)。
 
@@ -11,11 +11,12 @@ farm-demo/
 ├── apps/web/        # Web 3D 原型（Vite + React 19 + R3F）— Phase 1 D1~D5 完成 + D6 反馈轮
 │   └── src/farm3d/  # gltf 资产管线 / motion 动画规范 / effects 特效 / sfx 合成音效
 │                    # events 事件系统（雨/旱/虫/施肥，React 外单例） / clickGuard / layout / useFarm / FarmScene
-├── apps/mobile/     # RN 版（Expo SDK 57 + expo-gl）— Phase 0 hello-cube 跑通（模拟器 ~20fps），Phase 2 移植目标
-├── packages/game/   # 游戏数值与状态机（纯 TS，双端共享，服务端同构；对基线零 diff）
+├── apps/mobile/     # RN 版（Expo SDK 57 + expo-gl）— Phase 0 hello-cube 跑通（模拟器 ~20fps），Phase 2 移植目标（暂缓）
+├── apps/minigame/   # Cocos Creator 微信小游戏（M1 本地编译通过，待编辑器组场景 + 真机调试）
+├── packages/game/   # 游戏数值与状态机（纯 TS，三端共享，服务端同构；对基线零 diff，仅 load/save 加可选 backend 注入点）
 ├── packages/assets/ # CC0 3D 模型（glTF，poly.pizza/Quaternius）+ 授权记录
 ├── scripts/         # patch-ios27-scene.sh（expo prebuild 后必跑）
-└── docs/            # PRD（含验收清单勾选进度）
+└── docs/            # PRD / MINIGAME（含验收清单勾选进度）
 ```
 
 ## 进度（2026-09-08；Phase 1 D1~D12 + P1-3 + P2-5 ~ P2-7 全部完成，Vercel 单线部署）
@@ -35,7 +36,10 @@ farm-demo/
 | Phase 2 P2-5 天气系统加固 | ✅ 完成 | 三处修复（时钟统一 / RNG 注入 / bonusMs 运行中钳位）+ 视觉氛围（lerp 权重 0.35→0.65 变天感 + 雨粒子风向）；reviewer 三条反馈同步落地；packages/game 零 diff（提交 dd1c494） |
 | Phase 2 P2-6 宠物狗定点踱步 | ✅ 完成 | D8 静态蹲姿升级为门口 6s 一来回定点踱步 + 四腿错相步态 + 躯干微浮 + cos 驱动的摆头；所有振幅/周期走 `deco/motion.ts` 的 `DOG_WALK`；packages/game 零 diff |
 | Phase 2 P2-7 春季日历天气系统 | ✅ 完成 | 180 天 / 60s/天；6 种天气按月动态概率 + 连雨约束 + 自动涌现干旱；顶部 WeatherForecast HUD（今日 + 未来 5 天 + ⏮⏪⏩⏭💧🏠）；天气/干旱由 forecast 派生（events.ts 移除瞬时随机）；packages/game 零 diff |
+| Phase 3 移动优先重做（iPhone 15） | ✅ 完成 | web 端 iOS HIG + Linear 风重做：TopBar/BottomBar 二分（44pt + 58pt）；种子栏缩为 3 颗 pill（🥕🌽🧪，价格 badge）+ 工具按钮（🏠🔇↺，↺ 长按 1s 防误触）；新增 `BottomSheet` iOS 抽屉承载天气/种子详情/摆件/教程；相机 FOV 52→48、距离收窄适配 portrait；deco 网格避让 HUD；`packages/game` 仍零 diff |
 | Phase 2 RN 移植（9/13~） | ⏸ 暂缓 | 按用户决定暂不移植，Web 版作为当前面试演示交付物 |
+| 微信小游戏 M1 单场景原型（9/8） | ✅ 本地编译通过 | `apps/minigame/` + Cocos Creator 3.8.x + 2D；6 块地 + 种子栏 + 金币 HUD + 种/收循环；`packages/game` load/save 加可选 backend 注入（向后兼容，web 端零改动，diff 11 行）；esbuild 预编译 game 包 + minigame 入口到 `assets/scripts/`（4.3kb + 10.9kb）；待 Cocos 编辑器组场景 + 微信开发者工具真机调试 |
+| 微信小游戏 M2/M3 | ⬜ 未开始 | 全功能 P1 复刻 / P2 系统（天气/害虫/摆件）复刻，见 `docs/MINIGAME.md` §6 |
 | Phase 3 / Phase 4 | ⬜ 未开始 | 按 PRD |
 
 ### D6 试玩反馈第一轮（2026-09-06）
@@ -240,7 +244,7 @@ npm run start -w @farm/mobile  # Metro（Expo Go / 模拟器）
 
 ### 待办（Phase 2 移植前）
 
-- `packages/game` 的 `load/save` 直连 `localStorage`，RN 无此全局——移植时把存储后端做成参数注入（web=localStorage，RN=AsyncStorage 封装）。
+- `packages/game` 的 `load/save` ~~直连 `localStorage`~~ — **✅ 2026-09-08 已注入式改造**（`StorageBackend` 可选参数；web 端不传参走默认 localStorage 零回归；小游戏端传 `createWxStorageBackend()`）。
 - `FarmScene.tsx` PlotView 的 hover 光标直连 `document.body.style.cursor`——RN 无 document，Phase 2 手势重写（gesture-handler）时消除，勿照搬。
 - `packages/game` 的 `!plot.plantedAt` 会把合法的 epoch-0 时间戳误判为空地块——demo 无影响（零 diff 红线，现不改），接服务端供时时改 `=== null` 判空。
 
