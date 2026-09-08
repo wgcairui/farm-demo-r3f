@@ -15,7 +15,7 @@
 
 import type { SaveData } from '@farm/game'
 import { getNow } from './time'
-import { advanceEvents, advancePlots, renderFrame } from '../render/loop'
+import { advanceEvents, advancePlots, renderFrame, tickClouds } from '../render/loop'
 import { consumeShake, setRainActive, updateParticles } from '../render/particles'
 import { tickFloaters } from '../render/floaters'
 import { isRain } from './events'
@@ -73,9 +73,10 @@ export function tickLoopStart(
     advanceEvents(currentData.plots)
     setRainActive(isRain())
 
-    // 3) 粒子 + 浮字
+    // 3) 粒子 + 浮字 + 云朵
     updateParticles(dt)
     tickFloaters()
+    tickClouds(dt)
 
     // 4) 相机 viewScale：收获推近 600ms outCubic，0→zoom→1
     const focus = getPendingFocus()
