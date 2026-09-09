@@ -1,0 +1,23 @@
+{
+  "platform": "wechatgame",
+  "buildPath": "./build",
+  "outputName": "wechatgame",
+  "buildBundleName": "game",
+  "encryptJs": false,
+  "md5Cache": false,
+  "inlineSpriteFrames": false,
+  "inlineAllSpriteFrames": false,
+  "mainCompressionType": "subpackage",
+  "polyfills": {
+    "async-functions": false,
+    "symbol": false
+  },
+  "subpackages": [],
+  "startScene": "Main",
+  "scenes": [
+    {
+      "url": "db://assets/scenes/Main.fire",
+      "inludeAll": false
+    }
+  ]
+}

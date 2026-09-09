@@ -1,0 +1,22 @@
+{
+  "name": "@farm/minigame",
+  "version": "0.1.0",
+  "main": "src/main.ts",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "typecheck:wechatgame": "tsc --noEmit -p tsconfig.wechatgame.json",
+    "build:wechat": "node ./build-wechat.mjs",
+    "build:wechatgame": "node ./build-wechatgame.mjs",
+    "preview": "node ./build-wechatgame.mjs && npx --yes serve build/wechatgame-preview -p 4173",
+    "open": "echo '在 Cocos Creator Dashboard 里打开 apps/minigame/ 项目根，然后菜单 → 项目 → 构建发布 → 平台 wechatgame；或在微信开发者工具里导入 apps/minigame/build/wechatgame/'"
+  },
+  "dependencies": {
+    "@farm/game": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.3"
+  }
+}
