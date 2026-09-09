@@ -18,3 +18,9 @@ apps/mobile/ios
 apps/mobile/android
 .vercel
 .env*
+
+# minigame 构建产物（重新跑 build-wechat*.mjs 即可重新生成）
+apps/minigame/build/
+apps/minigame/_game.bundled.js
+apps/minigame/preview/game_bundle.js
+apps/minigame/preview/*.png
