@@ -1,5 +1,7 @@
-// D5 动画规范：过渡动画只用三档时长 + 浮字可读档，easing 统一从这里取。
-// 例外：生长是持续过程不是过渡，走自己的全程 outCubic（也收口在此，保证全项目只有一个 easing 来源）。
+// 直接镜像 apps/web/src/farm3d/motion.ts（顶层常量）。
+// 时长/缓动是游戏内一切动画的"硬通约"，双端必须同源。
+// 小游戏端原 apps/minigame/src/motion.ts 已废弃，统一指向本文件。
+
 export const DUR = {
   /** 微反馈：金币收尾、数字跳动 */
   fast: 150,
@@ -28,7 +30,7 @@ export const ease = {
   sinPing: (t: number) => Math.sin(ease.clamp01(t) * Math.PI),
 }
 
-// P1-6 昼夜氛围：帧率无关阻尼系数，越小越柔
+// 昼夜氛围：帧率无关阻尼系数，越小越柔（P1-6 用）
 export const DAY_NIGHT = {
   k: 4,
 } as const

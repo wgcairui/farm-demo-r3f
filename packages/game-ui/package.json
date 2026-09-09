@@ -1,0 +1,16 @@
+{
+  "name": "@farm/game-ui",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "type": "module",
+  "dependencies": {
+    "@farm/game": "*"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

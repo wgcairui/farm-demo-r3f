@@ -142,15 +142,28 @@ function isSaveData(v: unknown): v is SaveData {
   )
 }
 
-export function load(): SaveData {
+// 存储后端注入点：web 端默认走 localStorage，移植到微信小游戏/RN 时由调用方传入适配 backend。
+// 不传参时行为与改动前完全一致（web 端现有调用点零改动）。
+// M1 阶段漏了 export，且整个注入式改造实际未生效；2026-09-09 补回（M1.5 真正落地）。
+export interface StorageBackend {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
+
+const defaultBackend: StorageBackend = {
+  getItem: (k) => localStorage.getItem(k),
+  setItem: (k, v) => localStorage.setItem(k, v),
+}
+
+export function load(backend: StorageBackend = defaultBackend): SaveData {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = backend.getItem(KEY)
     if (raw) {
       const parsed: unknown = JSON.parse(raw)
       if (isSaveData(parsed)) return parsed
     }
     // v1 迁移：尝试读旧 key
-    const rawV1 = localStorage.getItem(KEY_V1)
+    const rawV1 = backend.getItem(KEY_V1)
     if (rawV1) {
       const parsedV1: unknown = JSON.parse(rawV1)
       if (isSaveDataV1(parsedV1)) {
@@ -172,8 +185,8 @@ export function load(): SaveData {
   }
 }
 
-export function save(d: SaveData) {
-  localStorage.setItem(KEY, JSON.stringify(d))
+export function save(d: SaveData, backend: StorageBackend = defaultBackend) {
+  backend.setItem(KEY, JSON.stringify(d))
 }
 
 /**

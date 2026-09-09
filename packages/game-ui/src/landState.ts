@@ -1,5 +1,5 @@
-// D7 新增：地块视觉状态层。
-// PlotState → 渲染颜色（tint）的映射表。
+// 直接镜像 apps/web/src/farm3d/landState.ts。
+// PlotState → 渲染颜色（tint）的映射表，跨端共用。
 // 6 态颜色设计：
 //   empty   — 裸土棕（0x8B6914），地表平静
 //   sown    — 浅土微隆起（0x7A5C1E），比 empty 略深，稍有存在感
