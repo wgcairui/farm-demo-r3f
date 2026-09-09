@@ -285,3 +285,191 @@ farm-demo/
 | juice 打磨（Phase 1 D4-D5 单独占 2 天） | 对方聊天原话"更看重前端设计以及产品交互" |
 | `packages/game` 解耦 + 后端化路线章节 | JD 第 3 条"把核心链路工程化" |
 | 两步走策略、砍单顺序、性能预算 | "能主动提技术方案、顶住早期不确定性"的现场素材 |
+
+---
+
+## 9. 第三平台 — 微信小游戏（QQ 农场风格 2D portrait）
+
+> **背景**：2026-09-08 用户决定"先做小游戏，再做 App"。本节定义小游戏端的范围、技术栈与验收。
+> **详细里程碑 + 检查点**：见 [ROADMAP.md](./ROADMAP.md)
+> **本节定位**：PRD 范围补充，ROADMAP 是落地执行手册。
+
+### 9.1 视觉与产品定位
+
+参考 QQ 空间「QQ 农场 / 花语农场」等主流卡通 2D 农场手游（参考图 5 张，已确认方向）：
+
+- **画幅**：750×1334 portrait（手机竖屏满屏）
+- **风格**：低多边形卡通 + 暖色调（草绿、土棕、米黄）
+- **信息密度**：顶部 HUD（头像/等级/经验/金币/钻石/任务入口）+ 中央 6 块地块网格 + 周围装饰（池塘/木栅栏/树/狗屋/茅草屋）+ 底部 5 个 Tab（仓库/商店/宠物/装扮/好友）
+
+### 9.2 与 Phase 1 web 3D 版的关系
+
+**web 端保留不废弃**：作为 3D 演示继续存在，但**不参与小游戏路线**。两者的关系：
+
+| 维度 | web 3D | 小游戏 2D |
+|---|---|---|
+| 主战场 | Phase 1（已完成 D1~D12）| Phase 4 路线（M1~M5）|
+| 渲染 | R3F + Three.js | Cocos Creator 3.8.x + 2D |
+| 视角 | 3D 透视 | 2:1 等距（俯视 45°）|
+| 操作 | 鼠标 + 键盘（R 键 reset）| 纯触摸（自带抗滑 8px）|
+| 美术资产 | CC0 glTF | sprite sheet（CC0 + AI 生成）|
+| 共享层 | `@farm/game` | `@farm/game` + `@farm/game-ui` |
+
+**两者核心循环完全一致**（选种→播种→生长→收获→金币），仅渲染壳不同。
+
+### 9.3 新增功能矩阵（v3 范围）
+
+小游戏端的"期望画面"包含 web 端没有的新功能，**`packages/game` 必须升级到 v3** 承载：
+
+| 功能 | 模块 | 优先级 | v3 字段 |
+|---|---|---|---|
+| 等级 + 经验值 | `PlayerStats` | P0 | `level`、`exp` |
+| 双货币（金币 + 钻石）| `SaveData` | P0 | 新增 `gems` |
+| 仓库（4 tab + 容量 210）| `Inventory` | P0 | `inventory: InventorySlot[]` |
+| 任务（成长 + 每日）| `Quests` | P0 | `quests: QuestState[]` |
+| 商店（24 作物 + 解锁等级）| 扩 `CROPS` | P0 | 每项加 `unlockLevel` |
+| 好友留言板 | `social.ts` | P1 | （小游戏独有，App 端简化或砍）|
+| 公益小红花 | `social.ts` | P2 | 装饰入口 |
+| 装扮系统 | `decorations.ts`（已存在，扩展）| P1 | 装扮类型 + 穿戴状态 |
+| 宠物系统 | `pets.ts` | P2 | 宠物实例 + 互动 |
+
+### 9.4 共享层重构：`packages/game-ui`
+
+web 端 `apps/web/src/farm3d/` 下的模块按"渲染无关"标准重分：
+
+| 现状位置 | 归属 | 理由 |
+|---|---|---|
+| `apps/web/src/farm3d/motion.ts` | 搬 `packages/game-ui` | 纯数值常量，跨端复用 |
+| `apps/web/src/farm3d/landState.ts` | 搬 `packages/game-ui` | 纯数值常量，跨端复用 |
+| `apps/web/src/farm3d/events.ts` | 搬 `packages/game-ui` | 纯逻辑单例，跨端复用 |
+| `apps/web/src/farm3d/time.ts` | 搬 `packages/game-ui` | 纯逻辑单例，跨端复用 |
+| `apps/web/src/farm3d/forecast.ts` | 搬 `packages/game-ui` | 纯逻辑单例，跨端复用 |
+| `apps/web/src/farm3d/decorations.ts` | 搬 `packages/game-ui` | 纯逻辑单例，跨端复用 |
+| `apps/web/src/farm3d/tutorial.ts` | 搬 `packages/game-ui` | 纯逻辑单例，跨端复用 |
+| `apps/web/src/farm3d/combo.ts` | 搬 `packages/game-ui` | 纯逻辑单例，跨端复用 |
+| `apps/web/src/farm3d/clickGuard.ts` | 搬 `packages/game-ui` | 跨端复用（≥8px 防抖）|
+| `apps/web/src/farm3d/gltf.ts` / `toon.ts` | **留 web** | 3D 专属 |
+| `apps/web/src/farm3d/deco/motion.ts` | **留 web** | 3D 专属（DOG_WALK / FISH 用世界单位）|
+| `apps/web/src/farm3d/effects.ts` / `sfx.ts` / `floater.ts` | **留 web** | R3F 专属 |
+
+**新增 `packages/game-ui/src/renderer/Adapter.ts`**：定义跨端渲染抽象接口（Cocos 后端 + Skia 后端各实现一次），详见 §11。
+
+### 9.5 资源管理：`packages/assets/sprites/`
+
+web 端的 `packages/assets/models/` 是 CC0 glTF，小游戏端需要：
+
+- **新建** `packages/assets/sprites/`（plist + png，TexturePacker 标准）
+- 命名规则：`{category}/{name}_{frame}.png`（如 `crops/corn_sprout.png`）
+- **跨端复用**：同一份 sprite 既给 Cocos 也给 RN Skia（Cocos 直接用 `cc.SpriteFrame`，Skia 直接读 plist 切片）
+- 来源优先级：CC0 资源包（opengameart / Kenney / Lospec）→ AI 生成（Stable Diffusion / Midjourney + 手工 style match）→ 外包
+
+### 9.6 验收标准（小游戏端）
+
+按 ROADMAP 检查点清单（M2 出口 C15~C26 + M4 出口 C40~C47）执行。
+
+### 9.7 废弃项
+
+| 废弃 | 理由 | 时机 |
+|---|---|---|
+| `apps/web2d/` | QQ 农场 portrait 跟它 16:9 等距不符 | 2026-09-09 用户决定废弃，M1.5 阶段执行删除 |
+| `apps/mobile/` 3D 路线 | mobile/ 之前 Phase 2 是 3D RN + Three.js 路线，与小游戏 2D 路线重复 | M4 启动时 mobile/ 重置为 2D portrait |
+
+---
+
+## 10. 后续平台 — iOS + Android App
+
+> 顺序：M4（App 工程启动）→ M5（商店上架）。技术栈与小游戏端**共享所有逻辑层与视图组件**。
+
+### 10.1 技术栈
+
+| 层 | 选型 | 理由 |
+|---|---|---|
+| 框架 | RN 0.86（沿用 Expo SDK 57）| 与现有 Expo 模板一致，避免引入新栈 |
+| 渲染 | react-native-skia + reanimated | 2D 高性能、JSX 风格、Cocos/Skia 调用模型对应 |
+| 视图组件 | 复用 `@farm/game-ui` 的 Adapter 视图组件 | 80% 代码与 minigame 同源 |
+| 适配器后端 | Skia 实现 RendererAdapter 接口 | M4 阶段唯一新增 |
+| 存储 | AsyncStorage（封装为 `StorageBackend`）| 与小游戏端同一注入式契约 |
+| 资源 | 同一份 sprite sheet | 跨端天然一致 |
+
+### 10.2 与小游戏端代码复用比例（预估）
+
+| 层 | 复用率 | 实现 |
+|---|---|---|
+| 逻辑（`packages/game`）| **100%** | 零改动跨端 |
+| 辅助（`packages/game-ui` 除渲染后端）| **95%** | 仅 input 层 5% 差异 |
+| 视图组件（在 game-ui 内）| **80%** | 通过 Adapter 抹平 |
+| Adapter 后端实现 | **0%** | Cocos 后端 vs Skia 后端各自独立 |
+| sprite 资源 | **100%** | 同一份位图跨平台 |
+
+### 10.3 不做的事
+
+- ❌ App 端 3D 渲染（mobile/ 之前 Phase 0~2 是 3D 路线，**M4 路线是 2D portrait 复用 minigame 视图**）
+- ❌ 在 App 端重写业务逻辑（直接接 AppController）
+- ❌ 在 App 端引入新游戏框架（如 react-native-game-engine）
+
+### 10.4 验收标准（App 端）
+
+按 ROADMAP 检查点清单（M4 出口 C40~C47 + M5 出口 C48~C52）执行。
+
+---
+
+## 11. RendererAdapter — 跨端视图抽象
+
+### 11.1 为什么需要
+
+小游戏端用 `cc.Graphics` / `cc.Label` / `cc.Sprite`，App 端用 Skia `<Rect/>` / `<Text/>` / `<Image/>`。**两套 API 调用模型完全不同**，如果不抽象，每个视图组件都得写两份。
+
+### 11.2 接口设计
+
+```ts
+// packages/game-ui/src/renderer/Adapter.ts
+export interface RendererAdapter {
+  // 基础绘制
+  drawRect(x: number, y: number, w: number, h: number, color: string, radius?: number): RendererNode
+  drawText(text: string, x: number, y: number, opts: TextOpts): RendererNode
+  drawImage(spriteId: string, x: number, y: number, w: number, h: number, frame?: number): Promise<RendererNode>
+
+  // 节点操作
+  setParent(child: RendererNode, parent: RendererNode | null): void
+  setPosition(node: RendererNode, x: number, y: number): void
+  setScale(node: RendererNode, scale: number): void
+  setOpacity(node: RendererNode, alpha: number): void
+  destroy(node: RendererNode): void
+
+  // 触摸输入
+  onTap(node: RendererNode, handler: () => void): void
+  onLongPress(node: RendererNode, handler: () => void): void
+
+  // 动画
+  tween(node: RendererNode, opts: TweenOpts): Promise<void>
+}
+```
+
+### 11.3 后端实现
+
+- **Cocos 后端**：`packages/game-ui/src/renderer/cocos/index.ts`（~400 行）
+- **Skia 后端**：`packages/game-ui/src/renderer/skia/index.ts`（~500 行，M4 阶段写）
+- **工厂**：`packages/game-ui/src/renderer/index.ts` 根据 `process.env.RENDERER` 或显式参数选后端
+
+### 11.4 视图组件
+
+`packages/game-ui/src/views/` 下写通用视图组件（`PlotView` / `HudTopBar` / `TabBarBottom` / `QuestPanel` / `WarehousePanel` / `ShopPanel`），**全部走 RendererAdapter**，不直接用 `cc.*` 或 `react-native-skia`。
+
+### 11.5 永远约束
+
+- RendererAdapter 一旦发布接口，**签名永不改动**（见 ROADMAP §8.3）
+- 新增方法时 Cocos 后端和 Skia 后端**同时实现**，缺一不可
+
+---
+
+## 12. PRD 验收清单 — 全平台汇总
+
+| 验收范围 | 文档 |
+|---|---|
+| 3D web 端 P0~P3 | PRD §3 + §6 |
+| 小游戏端 M1 ~ M5 检查点 | ROADMAP §2 ~ §7 |
+| 共享层（game + game-ui）迁移与重构 | PRD §9.4 + ROADMAP §3 |
+| 跨端 RendererAdapter 接口契约 | PRD §11 + ROADMAP §8.3 |
+| App 端 M4 ~ M5 检查点 | ROADMAP §6 + §7 |
+
+**总检查点**：M1 已通过 C1~C6（GUI 操作未跑）；M1.5 待跑 C7~C14；M2 计划 C15~C26；M3 计划 C27~C39；M4 计划 C40~C47；M5 计划 C48~C52。**累计 52 个检查点**，每个里程碑出口必须全部通过。
