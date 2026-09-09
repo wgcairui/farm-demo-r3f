@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>开心农场 M1 浏览器预览</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #222; overflow: hidden; height: 100%; }
+  body { display: flex; align-items: center; justify-content: center; }
+  #frame {
+    width: 375px; height: 667px;
+    background: #8fc34a;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border-radius: 24px;
+    overflow: hidden;
+    position: relative;
+  }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  #info {
+    position: fixed; top: 12px; left: 12px; color: #fff; font: 13px monospace;
+    background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 8px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="frame">
+  <canvas id="game" width="750" height="1334"></canvas>
+</div>
+<div id="info">
+  开心农场 M1 浏览器预览（≈ 微信小游戏运行时验证）<br>
+  点击地块播种 / 点击成熟作物收获 / 点击底部种子栏切换<br>
+  designResolution 750×1334 → 缩放至 375×667 渲染
+</div>
+<script>
+// Browser-side polyfill of the wechatgame bootstrap.
+// 不动 src-wechatgame/ 任何一行；这里只让 main.ts 在浏览器里跑。
+GameGlobal = window
+GameGlobal.localStorage = window.localStorage
+// 把 clientX/Y 从 viewport 坐标转换到 canvas 设计坐标（750×1334）
+const _canvas = document.getElementById('game')
+function _toDesign(clientX, clientY) {
+  const r = _canvas.getBoundingClientRect()
+  const sx = _canvas.width / r.width
+  const sy = _canvas.height / r.height
+  return { clientX: (clientX - r.x) * sx, clientY: (clientY - r.y) * sy }
+}
+GameGlobal.wx = {
+  createCanvas() { return _canvas },
+  getSystemInfoSync() { return { windowWidth: 375, windowHeight: 667, pixelRatio: window.devicePixelRatio || 1 } },
+  getStorageSync(k) { return window.localStorage.getItem(k) },
+  setStorageSync(k, v) { window.localStorage.setItem(k, String(v)) },
+  removeStorageSync(k) { window.localStorage.removeItem(k) },
+  clearStorageSync() { window.localStorage.clear() },
+  onTouchStart(cb) {
+    window.addEventListener('touchstart', (e) => {
+      const t = e.touches[0]
+      if (!t) return
+      const d = _toDesign(t.clientX, t.clientY)
+      cb({ touches: [d] })
+    }, { passive: true })
+    window.addEventListener('mousedown', (e) => {
+      const d = _toDesign(e.clientX, e.clientY)
+      cb({ touches: [d] })
+    })
+  },
+  onTouchEnd(cb) {
+    window.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0]
+      if (!t) return
+      const d = _toDesign(t.clientX, t.clientY)
+      cb({ changes: [d] })
+    }, { passive: true })
+    window.addEventListener('mouseup', (e) => {
+      const d = _toDesign(e.clientX, e.clientY)
+      cb({ changes: [d] })
+    })
+  },
+  onTouchMove() {},
+}
+</script>
+<script src="./game_bundle.js"></script>
+<script>
+// 浏览器预览版本：从 build/wechatgame-preview/game_bundle.js 同目录拷贝到 preview/ 后
+// 通过这个相对路径加载。bundle 体积 16kb，可放心放本地。
+</script>
+</body>
+</html>
