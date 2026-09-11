@@ -120,15 +120,16 @@ function generateForecasts(seed: number): DailyForecast[] {
 
 // —— 查询接口 ——
 
-/** 今天的 forecast */
+/** 今天的 forecast（getGameDay 已钳上界，这里再兜底防 days[] 短数组） */
 export function getTodayForecast(): DailyForecast {
-  return days[Math.min(getGameDay(), TOTAL_DAYS - 1)]
+  const d = days[Math.min(getGameDay(), TOTAL_DAYS - 1)]
+  return d ?? { kind: 'sunny', tempHigh: 18, tempLow: 8 }
 }
 
 /** 指定游戏日的 forecast（dayOffset=0 今天，1 明天，-1 昨天） */
 export function getForecast(day: number): DailyForecast {
   const d = Math.max(0, Math.min(TOTAL_DAYS - 1, day))
-  return days[d]
+  return days[d] ?? { kind: 'sunny', tempHigh: 18, tempLow: 8 }
 }
 
 /** 指定游戏日是否处于干旱（连续 ≥4 天无雨，自动涌现） */
@@ -137,7 +138,9 @@ export function isDroughtDay(day: number): boolean {
   // 看从 day-4 到 day-1 的连续非雨日数
   let consecutiveDry = 0
   for (let i = day - 1; i >= day - 5 && i >= 0; i--) {
-    if (!isRainKind(days[i].kind)) consecutiveDry++
+    const d = days[i]
+    if (!d) break // days[] 长度 < TOTAL_DAYS 时防御性兜底
+    if (!isRainKind(d.kind)) consecutiveDry++
     else break
   }
   // 连续 ≥4 天无雨 → 当天干旱
@@ -176,7 +179,19 @@ try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed === 'object' && parsed !== null) {
       const p = parsed as Record<string, unknown>
-      if (Array.isArray(p.days) && p.days.length === TOTAL_DAYS) {
+      if (
+        Array.isArray(p.days) &&
+        p.days.length === TOTAL_DAYS &&
+        // 逐项校验 kind/temp 是合法形状，否则视为损坏重生成
+        p.days.every(
+          (d) =>
+            d !== null &&
+            typeof d === 'object' &&
+            typeof (d as Record<string, unknown>).kind === 'string' &&
+            typeof (d as Record<string, unknown>).tempHigh === 'number' &&
+            typeof (d as Record<string, unknown>).tempLow === 'number',
+        )
+      ) {
         days = p.days as DailyForecast[]
       }
     }

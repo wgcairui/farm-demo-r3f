@@ -72,9 +72,11 @@ export function getNow(): number {
   return startAtMs + getElapsedMs()
 }
 
-/** 当前是第几个游戏日（0 = 3 月 1 日） */
+/** 当前是第几个游戏日（0 = 3 月 1 日）。
+ * 上界钳到 TOTAL_DAYS-1：跨过 9 月 30 日后游戏日就停在 179，
+ * 避免 isDroughtDay / events 等基于 days[] 下标的代码越界访问。 */
 export function getGameDay(): number {
-  return Math.max(0, Math.floor(getElapsedMs() / MS_PER_DAY))
+  return Math.min(TOTAL_DAYS - 1, Math.max(0, Math.floor(getElapsedMs() / MS_PER_DAY)))
 }
 
 /** 真实小时（24h 制）：玩家主观时间是「3 月 1 日 06:00 开始，每 60s 走完 1 天」 */
